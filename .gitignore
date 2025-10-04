@@ -9,6 +9,9 @@ CMakeScripts/
 cmake-build-*/
 cmake_install.cmake
 Makefile
+*.a
+*.cmake
+xxhash_build/*
 
 .Python
 build/
