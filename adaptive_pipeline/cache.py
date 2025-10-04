@@ -7,7 +7,7 @@ import collections.abc
 from typing import Tuple, Iterator, Optional, Any
 
 try:
-    from ._adaptive_pipeline_cache_impl import AdaptivePipeLineCacheImpl
+    from ._adaptive_pipeline_cache_impl import AdaptivePipelineCacheImpl
 except ImportError as e:
     raise ImportError(
         "Could not import C++ extension. Make sure the package was built correctly. "
@@ -15,7 +15,7 @@ except ImportError as e:
     ) from e
 
 
-class AdaptivePipeLineCache(collections.abc.MutableMapping):
+class AdaptivePipelineCache(collections.abc.MutableMapping):
     
     __marker : Tuple[float, int] = (-1.0, -1)  # Sentinel for default values
     
@@ -23,12 +23,12 @@ class AdaptivePipeLineCache(collections.abc.MutableMapping):
         if not isinstance(maxsize, int) or maxsize <= 0:
             raise ValueError("maxsize must be a positive integer")
             
-        self._impl = AdaptivePipeLineCacheImpl(maxsize)
+        self._impl = AdaptivePipelineCacheImpl(maxsize)
         
         self.__size = 0
     
     def __repr__(self) -> str:
-        return repr(AdaptivePipeLineCacheImpl)
+        return repr(AdaptivePipelineCacheImpl)
     
     def __getitem__(self, key: int) -> Tuple[float, int]:
         self._validate_key(key)
