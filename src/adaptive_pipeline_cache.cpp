@@ -1,14 +1,13 @@
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
-#include <pybind11/operators.h>
 #include <array>
 #include <vector>
 #include <tuple>
 #include <cstdint>
+#include <iostream>
+#include <fstream>
+#include "constants.hpp"
+#include "pipeline_block.hpp"
 #include "xxhash.h"
 #include "pipeline_cache.hpp"
-
-namespace py = pybind11;
 
 enum GhostCaches {
     FIFO_ALRU,
@@ -47,26 +46,26 @@ public:
     explicit AdaptivePipelineCache(size_t maxsize) : m_main_cache{}, m_main_sampled{}, m_ghost_caches{}, ops_since_last_decision{0}
     {
         assert(maxsize == Constants::PIPELINE_CACHE_CAPACITY);
-        
-        for (uint64_t type = 0; type < GhostCaches::NUM_GHOST_CACHES; ++type)
-        {
-            const auto& blks_to_transfer = ghost_caches_indeces[type];
-            m_ghost_caches[type].move_quantum(blks_to_transfer.first, blks_to_transfer.second);
-        }
+
+        create_ghost_caches();
     }
 
     std::tuple<double, uint64_t> getitem(uint64_t key) 
     {
         ++ops_since_last_decision;
-        const auto& entry = m_main_cache.get_item(key);
+        const EntryData& entry = m_main_cache.get_item(key);
         std::tuple<double, uint64_t> item = std::make_tuple(entry.latency, entry.tokens);
         
         if (should_sample(key))
-        {
-            m_main_sampled.get_item(key);
+        {   
+            const double latency = entry.latency;
+            const uint64_t tokens = entry.tokens;
+
+            perform_op_on_ghost(m_main_sampled, key, latency, tokens);
+
             for (uint64_t type = 0; type < GhostCaches::NUM_GHOST_CACHES; ++type)
             {
-                m_ghost_caches[type].get_item(key);
+                perform_op_on_ghost(m_ghost_caches[type], key, latency, tokens);
             }
         }
 
@@ -80,22 +79,35 @@ public:
         m_main_cache.insert_item(key, latency, tokens);
         
         if (should_sample(key))
-        {
-            m_main_sampled.insert_item(key, latency, tokens);
-            if (m_main_sampled.should_evict())
-            {
-                m_main_sampled.evict_item();
-            }
+        {   
+            perform_op_on_ghost(m_main_sampled, key, latency, tokens);
 
             for (uint64_t type = 0; type < GhostCaches::NUM_GHOST_CACHES; ++type)
             {
-                m_ghost_caches[type].insert_item(key, latency, tokens);
-                if (m_ghost_caches[type].should_evict())
-                {
-                    m_ghost_caches[type].evict_item();
-                }
+                perform_op_on_ghost(m_ghost_caches[type], key, latency, tokens);
             }
+        }
 
+        if (ops_since_last_decision >= Constants::DECISION_WINDOW_SIZE && m_main_cache.size() == m_main_cache.capacity())
+        {
+            ops_since_last_decision = 0;
+            adapt();
+        }
+    }
+
+    static void perform_op_on_ghost(PipelineCacheProxy& proxy, uint64_t key, double latency, uint64_t tokens)
+    {
+        if (proxy.contains(key))
+        {
+            proxy.get_item(key);
+        }
+        else 
+        {
+            proxy.insert_item(key, latency, tokens);
+            if (proxy.should_evict())
+            {
+                proxy.evict_item();
+            }
         }
     }
 
@@ -118,10 +130,10 @@ public:
                 minimal_idx = type;
             }
         }
-        
-        assert(minimal_idx < GhostCaches::NUM_GHOST_CACHES 
+
+        assert(minimal_idx < GhostCaches::NUM_GHOST_CACHES
             && minimal_timeframe_ghost_cost < std::numeric_limits<double>::max());
-            
+
         if (minimal_timeframe_ghost_cost < current_timeframe_cost)
         {
             const std::pair<uint64_t, uint64_t> indeces_for_adaption = ghost_caches_indeces[minimal_idx];
@@ -129,19 +141,27 @@ public:
             m_main_cache.move_quantum(indeces_for_adaption.first, indeces_for_adaption.second);
             m_main_sampled.move_quantum(indeces_for_adaption.first, indeces_for_adaption.second);
 
-            for (uint64_t type = 0; type < GhostCaches::NUM_GHOST_CACHES; ++type)
+            create_ghost_caches();
+        }
+
+    }
+
+    void create_ghost_caches()
+    {
+        m_main_sampled.prepare_for_copy();
+
+        for (uint64_t type = 0; type < GhostCaches::NUM_GHOST_CACHES; ++type)
+        {
+            const std::pair<uint64_t, uint64_t> indeces = ghost_caches_indeces[type];
+            m_ghost_caches[type] = m_main_sampled;
+            if (m_main_sampled.can_adapt(indeces.first, false) && m_main_sampled.can_adapt(indeces.second, true))
             {
-                const std::pair<uint64_t, uint64_t> indeces = ghost_caches_indeces[type];
-                m_ghost_caches[type] = m_main_sampled;
-                if (m_main_sampled.can_adapt(indeces.first, indeces.second))
-                {
-                    m_ghost_caches[type].make_non_dummy();
-                    m_ghost_caches[type].move_quantum(indeces.first, indeces.second);
-                }
-                else
-                {
-                    m_ghost_caches[type].make_dummy();
-                }
+                m_ghost_caches[type].make_non_dummy();
+                m_ghost_caches[type].move_quantum(indeces.first, indeces.second);
+            }
+            else
+            {
+                m_ghost_caches[type].make_dummy();
             }
         }
     }
@@ -198,25 +218,3 @@ public:
         return m_main_cache.get_current_config();
     }
 };
-
-// IMPORTANT: The module name here MUST match the name in setup.py ext_modules
-PYBIND11_MODULE(_adaptive_pipeline_cache_impl, m) {
-    m.doc() = "Internal C++ implementation of The Pipeline Cache";
-
-    py::class_<AdaptivePipelineCache>(m, "AdaptivePipelineCacheImpl")
-        .def(py::init<size_t>(), "Initialize Pipeline cache with maximum size")
-        .def("__getitem__", &AdaptivePipelineCache::getitem)
-        .def("__setitem__", &AdaptivePipelineCache::setitem)
-        .def("__delitem__", &AdaptivePipelineCache::delitem)
-        .def("__contains__", &AdaptivePipelineCache::contains)
-        .def("__len__", &AdaptivePipelineCache::currsize)
-        .def("__repr__", &AdaptivePipelineCache::repr)
-        .def("popitem", &AdaptivePipelineCache::popitem)
-        .def("get", &AdaptivePipelineCache::get, py::arg("key"), py::arg("default") = std::make_tuple(0.0, 0))
-        .def("keys", &AdaptivePipelineCache::keys)
-        .def("values", &AdaptivePipelineCache::values)
-        .def("clear", &AdaptivePipelineCache::clear)
-        .def_property_readonly("maxsize", &AdaptivePipelineCache::maxsize)
-        .def_property_readonly("currsize", &AdaptivePipelineCache::currsize)
-        .def("empty", &AdaptivePipelineCache::empty);
-}
