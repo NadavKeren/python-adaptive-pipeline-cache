@@ -1,18 +1,28 @@
-cmake_minimum_required(VERSION 3.31)
+cmake_minimum_required(VERSION 3.15)
 project(pipeline_cache)
+set(CMAKE_BUILD_TYPE Debug)
 
 find_package(pybind11 REQUIRED)
 
-set(CMAKE_BUILD_TYPE Debug)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(XXHASH_BUILD_XXHSUM OFF)        # Don't build command line tool of xxhash
-option(BUILD_SHARED_LIBS OFF)       # Build static library of xxHash
-add_subdirectory(external/xxHash/build/cmake xxhash_build EXCLUDE_FROM_ALL)
+# Use FetchContent to automatically download xxHash if not present
+include(FetchContent)
+set(XXHASH_BUILD_XXHSUM OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+
+FetchContent_Declare(
+    xxHash
+    GIT_REPOSITORY https://github.com/Cyan4973/xxHash.git
+    GIT_TAG v0.8.2
+    SOURCE_SUBDIR cmake_unofficial
+)
+
+FetchContent_MakeAvailable(xxHash)
 set_target_properties(xxhash PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-add_library(_adaptive_pipeline_cache_impl MODULE
+add_library(pipeline_cache_core STATIC
     src/adaptive_pipeline_cache.cpp
     src/cost_aware_lfu_block.cpp
     src/approximate_lru_block.cpp
@@ -21,6 +31,31 @@ add_library(_adaptive_pipeline_cache_impl MODULE
     src/count_min_sketch.cpp
 )
 
-target_link_libraries(_adaptive_pipeline_cache_impl PRIVATE pybind11::module xxHash::xxhash)
+set_target_properties(pipeline_cache_core PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+)
+
+target_include_directories(pipeline_cache_core
+    PUBLIC ${CMAKE_SOURCE_DIR}/src
+)
+target_link_libraries(pipeline_cache_core
+    PRIVATE xxHash::xxhash
+)
+
+pybind11_add_module(_adaptive_pipeline_cache_impl
+    src/adaptive_pipeline_cache_binding.cpp
+)
+
+target_link_libraries(_adaptive_pipeline_cache_impl 
+    PRIVATE pipeline_cache_core
+)
+
+target_link_libraries(_adaptive_pipeline_cache_impl PUBLIC xxHash::xxhash)
 target_include_directories(_adaptive_pipeline_cache_impl PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(_adaptive_pipeline_cache_impl PRIVATE pybind11::module xxHash::xxhash)
+
+# Only build tests if explicitly requested (not during wheel build)
+if(BUILD_TESTING)
+    add_subdirectory(tests/cpp-tests)
+endif()
+
+install(TARGETS _adaptive_pipeline_cache_impl DESTINATION adaptive_pipeline)
