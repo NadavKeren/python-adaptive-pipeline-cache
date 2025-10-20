@@ -9,17 +9,23 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Use FetchContent to automatically download xxHash if not present
 include(FetchContent)
-set(XXHASH_BUILD_XXHSUM OFF CACHE BOOL "" FORCE)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
 FetchContent_Declare(
     xxHash
     GIT_REPOSITORY https://github.com/Cyan4973/xxHash.git
     GIT_TAG v0.8.2
-    SOURCE_SUBDIR cmake_unofficial
 )
 
-FetchContent_MakeAvailable(xxHash)
+FetchContent_GetProperties(xxHash)
+if(NOT xxhash_POPULATED)
+    FetchContent_Populate(xxHash)
+endif()
+
+# Build xxHash directly from source without using their CMakeLists
+add_library(xxhash STATIC
+    ${xxhash_SOURCE_DIR}/xxhash.c
+)
+target_include_directories(xxhash PUBLIC ${xxhash_SOURCE_DIR})
 set_target_properties(xxhash PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_library(pipeline_cache_core STATIC
@@ -39,18 +45,17 @@ target_include_directories(pipeline_cache_core
     PUBLIC ${CMAKE_SOURCE_DIR}/src
 )
 target_link_libraries(pipeline_cache_core
-    PRIVATE xxHash::xxhash
+    PRIVATE xxhash
 )
 
 pybind11_add_module(_adaptive_pipeline_cache_impl
     src/adaptive_pipeline_cache_binding.cpp
 )
 
-target_link_libraries(_adaptive_pipeline_cache_impl 
-    PRIVATE pipeline_cache_core
+target_link_libraries(_adaptive_pipeline_cache_impl
+    PRIVATE pipeline_cache_core xxhash
 )
 
-target_link_libraries(_adaptive_pipeline_cache_impl PUBLIC xxHash::xxhash)
 target_include_directories(_adaptive_pipeline_cache_impl PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
 # Only build tests if explicitly requested (not during wheel build)
