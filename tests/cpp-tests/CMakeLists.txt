@@ -29,7 +29,7 @@ file(GLOB TEST_SUITES "*.cpp")
 foreach(test_file ${TEST_SUITES})
     get_filename_component(test_name ${test_file} NAME_WE)
     add_executable(${test_name} ${test_file})
-    target_link_libraries(${test_name} PRIVATE pipeline_cache_core xxHash::xxhash GTest::gtest_main)
+    target_link_libraries(${test_name} PRIVATE pipeline_cache_core xxhash GTest::gtest_main)
     target_compile_definitions(${test_name} PRIVATE
     "CMAKE_CURRENT_SOURCE_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}\""
     )
