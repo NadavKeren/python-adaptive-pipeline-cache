@@ -20,35 +20,28 @@ public:
         m_data = new T[m_capacity];
     }
 
-    FixedSizeArray(const FixedSizeArray& other) 
+    FixedSizeArray(const FixedSizeArray& other)
+        : m_capacity(other.m_capacity), m_size(other.m_size), m_head(other.m_head), m_tail(other.m_tail)
     {
         assert(!other.is_rotated());
-        if (m_data != nullptr) 
-        {
-            assert(m_capacity == other.m_capacity);
-        }
-        else
-        {
-            m_capacity = other.m_capacity;
-            m_data = new T[m_capacity];
-        }
-
-        m_size = other.m_size;
-        m_head = other.m_head;
-        m_tail = other.m_tail;
+        m_data = new T[m_capacity];
         std::memcpy(m_data, other.m_data, m_size * sizeof(T));
         assert(m_tail == m_head + m_size);
     }
 
-    FixedSizeArray& operator=(const FixedSizeArray& other) 
+    FixedSizeArray& operator=(const FixedSizeArray& other)
     {
         assert(!other.is_rotated());
         if (this != &other) {
-            if (m_data != nullptr) 
+            // If capacity differs, reallocate
+            if (m_data != nullptr && m_capacity != other.m_capacity)
             {
-                assert(m_capacity == other.m_capacity);
+                delete[] m_data;
+                m_data = nullptr;
             }
-            else 
+
+            // Allocate if needed
+            if (m_data == nullptr)
             {
                 m_capacity = other.m_capacity;
                 m_data = new T[m_capacity];

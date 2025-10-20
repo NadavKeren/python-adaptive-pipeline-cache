@@ -84,7 +84,7 @@ void CountMinSketch::copy_table(const CountMinSketch& other)
     }
 
     hash_coefficients = new uint32_t[depth];
-    std::memcpy(hash_coefficients, other.hash_coefficients, sizeof(uint32_t) * width);
+    std::memcpy(hash_coefficients, other.hash_coefficients, sizeof(uint32_t) * depth);
 }
 
 uint32_t CountMinSketch::hash(uint64_t key, uint32_t row) const
