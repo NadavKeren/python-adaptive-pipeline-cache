@@ -38,11 +38,6 @@ jobs:
           # For macOS: specify minimum deployment target
           CIBW_ENVIRONMENT_MACOS: MACOSX_DEPLOYMENT_TARGET=10.15
 
-          # Install dependencies before building - cmake and ninja are needed
-          CIBW_BEFORE_BUILD_LINUX: yum install -y cmake3 && ln -sf /usr/bin/cmake3 /usr/bin/cmake || apt-get update && apt-get install -y cmake
-          CIBW_BEFORE_BUILD_MACOS: brew install cmake ninja || true
-          CIBW_BEFORE_BUILD_WINDOWS: pip install cmake ninja
-
           # Run tests after building (optional)
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: python -c "from adaptive_pipeline import AdaptivePipelineCache; cache = AdaptivePipelineCache(1024); print('Import test passed')"
