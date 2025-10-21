@@ -32,7 +32,6 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: C++",
     "Topic :: Software Development :: Libraries :: Python Modules",
-    "Topic :: System :: Caching",
     "Typing :: Typed",
 ]
 dependencies = [
