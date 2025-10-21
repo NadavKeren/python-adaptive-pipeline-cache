@@ -67,10 +67,9 @@ environment = { MACOSX_DEPLOYMENT_TARGET = "10.15" }
 
 # Linux specific settings
 [tool.cibuildwheel.linux]
-archs = ["x86_64", "aarch64"]
+archs = ["x86_64"]
 # Use manylinux2014 for broader compatibility
 manylinux-x86_64-image = "manylinux2014"
-manylinux-aarch64-image = "manylinux2014"
 
 # Windows specific settings
 [tool.cibuildwheel.windows]
