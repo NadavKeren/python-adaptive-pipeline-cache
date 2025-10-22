@@ -7,7 +7,6 @@ find_package(pybind11 REQUIRED)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Use FetchContent to automatically download xxHash if not present
 include(FetchContent)
 
 FetchContent_Declare(
@@ -21,7 +20,6 @@ if(NOT xxhash_POPULATED)
     FetchContent_Populate(xxHash)
 endif()
 
-# Build xxHash directly from source without using their CMakeLists
 add_library(xxhash STATIC
     ${xxhash_SOURCE_DIR}/xxhash.c
 )
@@ -58,11 +56,8 @@ target_link_libraries(_adaptive_pipeline_cache_impl
 
 target_include_directories(_adaptive_pipeline_cache_impl PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
-# Only build tests if explicitly requested (not during wheel build)
 if(BUILD_TESTING)
     add_subdirectory(tests/cpp-tests)
 endif()
 
-# Install the Python extension module
-# scikit-build-core will handle the proper destination based on pyproject.toml config
 install(TARGETS _adaptive_pipeline_cache_impl DESTINATION .)

@@ -12,18 +12,7 @@ FetchContent_MakeAvailable(googletest)
 
 enable_testing()
 
-# add_library(common_includes INTERFACE)
-# target_include_directories(common_includes INTERFACE ../../src)
-# target_link_libraries(common_includes INTERFACE GTest::gtest_main)
 include(GoogleTest)
-
-# set(XXHASH_BUILD_XXHSUM OFF)
-# option(BUILD_SHARED_LIBS OFF)
-# add_subdirectory(../../external/xxHash/build/cmake xxhash_build EXCLUDE_FROM_ALL)
-# set_target_properties(xxhash PROPERTIES POSITION_INDEPENDENT_CODE ON)
-
-# target_link_libraries(_adaptive_pipeline_cache_impl PRIVATE xxHash::xxhash)
-# target_include_directories(_adaptive_pipeline_cache_impl PRIVATE $../../src)
 
 file(GLOB TEST_SUITES "*.cpp")
 foreach(test_file ${TEST_SUITES})
