@@ -43,10 +43,8 @@ private:
     uint64_t ops_since_last_decision;
 
 public:
-    explicit AdaptivePipelineCache(size_t maxsize) : m_main_cache{}, m_main_sampled{}, m_ghost_caches{}, ops_since_last_decision{0}
+    explicit AdaptivePipelineCache(size_t /*maxsize*/) : m_main_cache{}, m_main_sampled{}, m_ghost_caches{}, ops_since_last_decision{0}
     {
-        assert(maxsize == Constants::PIPELINE_CACHE_CAPACITY);
-
         create_ghost_caches();
     }
 

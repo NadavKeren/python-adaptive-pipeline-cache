@@ -3,7 +3,7 @@
 #include "utils.cpp"
 
 namespace Constants {
-    constexpr uint64_t PIPELINE_CACHE_CAPACITY = 1024;
+    constexpr uint64_t PIPELINE_CACHE_CAPACITY = 256;
     constexpr uint64_t NUM_OF_QUONTA = 16;
     constexpr uint64_t QUANTUM_SIZE = PIPELINE_CACHE_CAPACITY / NUM_OF_QUONTA;
     constexpr uint64_t NUM_OF_BLOCKS = 3;
@@ -18,6 +18,6 @@ namespace Constants {
     constexpr double SKETCH_ERROR = 0.01;
     constexpr double SKETCH_PROB = 0.99;
     constexpr uint64_t AGING_MULTIPLIER = 10;
-    constexpr uint64_t DECISION_WINDOW_SIZE = 10 * PIPELINE_CACHE_CAPACITY;
+    constexpr uint64_t DECISION_WINDOW_SIZE = 8 * PIPELINE_CACHE_CAPACITY;
     constexpr uint64_t RANDOM_SEED = 42;
 }
