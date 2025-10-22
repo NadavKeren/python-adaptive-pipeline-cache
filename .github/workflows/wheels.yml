@@ -16,7 +16,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-13, macos-14]  # macos-13=Intel, macos-14=Apple Silicon
+        include:
+          - os: ubuntu-latest
+            cibw_archs: "x86_64"
+          - os: windows-latest
+            cibw_archs: "AMD64"
+          - os: macos-13  # Intel
+            cibw_archs: "x86_64"
+          - os: macos-14  # Apple Silicon
+            cibw_archs: "arm64"
 
     steps:
       - uses: actions/checkout@v4
@@ -37,6 +45,9 @@ jobs:
 
           # For macOS: specify minimum deployment target
           CIBW_ENVIRONMENT_MACOS: MACOSX_DEPLOYMENT_TARGET=10.15
+
+          # Build only for the specified architecture
+          CIBW_ARCHS: ${{ matrix.cibw_archs }}
 
           # Run tests after building (optional)
           CIBW_TEST_REQUIRES: pytest
