@@ -78,3 +78,10 @@ archs = ["AMD64"]
 test-requires = "pytest"
 test-command = "python -c \"from adaptive_pipeline import AdaptivePipelineCache; cache = AdaptivePipelineCache(1024); print('Wheel test passed!')\""
 
+# scikit-build-core configuration
+[tool.scikit-build]
+cmake.verbose = true
+cmake.build-type = "Release"
+wheel.install-dir = "adaptive_pipeline"
+wheel.packages = ["adaptive_pipeline"]
+

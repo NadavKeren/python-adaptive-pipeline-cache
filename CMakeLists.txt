@@ -63,4 +63,6 @@ if(BUILD_TESTING)
     add_subdirectory(tests/cpp-tests)
 endif()
 
-install(TARGETS _adaptive_pipeline_cache_impl DESTINATION adaptive_pipeline)
+# Install the Python extension module
+# scikit-build-core will handle the proper destination based on pyproject.toml config
+install(TARGETS _adaptive_pipeline_cache_impl DESTINATION .)
