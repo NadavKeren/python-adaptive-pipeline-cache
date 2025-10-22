@@ -13,7 +13,6 @@ namespace Constants {
     constexpr uint64_t SAMPLED_CACHE_CAPACITY = PIPELINE_CACHE_CAPACITY / SAMPLE_RATE;
     constexpr uint64_t SAMPLED_QUANTUM_SIZE = QUANTUM_SIZE / SAMPLE_RATE;
     constexpr uint64_t AGING_WINDOW_SIZE = 10 * PIPELINE_CACHE_CAPACITY;
-    constexpr uint64_t EVICTION_QUEUE_SIZE = 10;
     constexpr uint64_t NUM_OF_ITEM_TO_SAMPLE = 16;
     constexpr double SKETCH_ERROR = 0.01;
     constexpr double SKETCH_PROB = 0.99;

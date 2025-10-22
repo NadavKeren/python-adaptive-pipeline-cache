@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <array>
 #include <unordered_map>
+#include <queue>
 #include <string>
 #include <memory>
 #include <fstream>
@@ -67,7 +68,7 @@ private:
     std::unordered_map<uint64_t, EntryPosition> m_items;
     std::array<std::unique_ptr<PipelineBlock>, Constants::NUM_OF_BLOCKS> m_blocks;
     std::array<uint64_t, Constants::NUM_OF_BLOCKS> m_quanta_alloc;
-    FixedSizeArray<EntryData> m_eviction_queue;
+    std::queue<EntryData> m_eviction_queue;
     CountMinSketch m_sketch;
     uint64_t m_ops_since_last_aging = 0;
     PipelineCache::TimeframeStats m_stats;

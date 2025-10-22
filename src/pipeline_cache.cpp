@@ -22,7 +22,7 @@ PipelineCache::PipelineCache(bool is_sampled)
                               m_items{m_cache_capacity * 2},
                               m_blocks{},
                               m_quanta_alloc{2, 6, 8},
-                              m_eviction_queue{Constants::EVICTION_QUEUE_SIZE},
+                              m_eviction_queue{},
                               m_sketch{Constants::SKETCH_ERROR, Constants::SKETCH_PROB},
                               m_ops_since_last_aging(0),
                               m_stats{},
@@ -40,7 +40,7 @@ PipelineCache::PipelineCache(const PipelineCache& other) : m_cache_capacity {oth
                                                            m_items{other.m_items},
                                                            m_blocks{},
                                                            m_quanta_alloc{other.m_quanta_alloc},
-                                                           m_eviction_queue{Constants::EVICTION_QUEUE_SIZE},
+                                                           m_eviction_queue{},
                                                            m_sketch{other.m_sketch},
                                                            m_ops_since_last_aging{0},
                                                            m_stats{},
@@ -73,7 +73,7 @@ PipelineCache& PipelineCache::operator=(const PipelineCache& other)
     }
 
     m_quanta_alloc = other.m_quanta_alloc;
-    m_eviction_queue = FixedSizeArray<EntryData>(Constants::EVICTION_QUEUE_SIZE);
+    m_eviction_queue = std::queue<EntryData>{};
     m_sketch = other.m_sketch;
     m_ops_since_last_aging = 0;
     m_stats = {};
@@ -132,8 +132,7 @@ void PipelineCache::insert_item(uint64_t key, double latency, uint64_t tokens)
     {
         m_items.erase(item.id);
 
-        assert(!m_eviction_queue.is_full());
-        m_eviction_queue.push_tail(item);
+        m_eviction_queue.push(item);
     }
 
     validate_sizes();
@@ -174,7 +173,9 @@ bool PipelineCache::contains(uint64_t key) const
 EntryData PipelineCache::evict_item() 
 {
     assert(!m_eviction_queue.empty());
-    return m_eviction_queue.pop_head();
+    EntryData item = m_eviction_queue.front();
+    m_eviction_queue.pop();
+    return item;
 }
 
 bool PipelineCache::should_evict() const
