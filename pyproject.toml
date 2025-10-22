@@ -9,7 +9,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "adaptive-pipeline"
-version = "0.1.3"
+version = "0.1.4"
 description = "An adaptive Pipeline Cache composed of FIFO and upgraded TinyLFU with cost-awareness"
 readme = "README.md"
 requires-python = ">=3.8"
