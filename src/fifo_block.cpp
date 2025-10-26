@@ -1,7 +1,6 @@
 #include <cassert>
 #include <string>
 #include <cstdint>
-#include <iostream>
 
 #include "pipeline_block.hpp"
 
@@ -11,8 +10,7 @@ public:
     explicit FIFOBlock(uint64_t capacity, uint64_t quantum_size, uint64_t quanta_allocation) 
             : BasePipelineBlock(capacity, quantum_size, quanta_allocation, "FIFO") {}
             
-            FIFOBlock(const FIFOBlock& other) : BasePipelineBlock(other)
-            {}
+            FIFOBlock(const FIFOBlock& other) = default;
 
     FIFOBlock& operator=(const FIFOBlock& other)
     {
@@ -51,5 +49,10 @@ public:
         EntryData evicted_item = m_arr.pop_head();
         m_arr.push_tail(item);
         return std::make_pair(m_arr.size() - 1, evicted_item);
+    }
+
+    void prepare_for_copy() override
+    {
+        this->m_arr.rotate();
     }
 };

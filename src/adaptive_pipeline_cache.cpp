@@ -4,48 +4,103 @@
 #include <cstdint>
 #include <iostream>
 #include <fstream>
-#include "constants.hpp"
+#include <nlohmann/json.hpp>
+#include <format>
+#include <libassert/assert.hpp>
+#include "utils.cpp"
 #include "pipeline_block.hpp"
 #include "xxhash.h"
 #include "pipeline_cache.hpp"
 
-enum GhostCaches {
-    FIFO_ALRU,
-    FIFO_COST,
-    ALRU_FIFO,
-    ALRU_COST,
-    COST_FIFO,
-    COST_ALRU,
-    NUM_GHOST_CACHES
-};
+using Json = nlohmann::json;
 
-constexpr std::array<std::pair<uint64_t, uint64_t>, (GhostCaches::NUM_GHOST_CACHES + 1)> ghost_caches_indeces
-{
-    std::make_pair(0, 1), 
-    std::make_pair(0, 2),
-    std::make_pair(1, 0),
-    std::make_pair(1, 2),
-    std::make_pair(2, 0),
-    std::make_pair(2, 1),
-    std::make_pair(std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint64_t>::max())
-};
-
-inline bool should_sample(uint64_t key) {
-    uint64_t hash = XXH3_64bits(&key, sizeof(key));
-    return (hash & Constants::SAMPLE_MASK) == 0;
+inline bool should_sample(uint64_t key, uint64_t seed, uint64_t sample_mask) {
+    uint64_t hash = XXH3_64bits_withSeed(&key, sizeof(key), seed);
+    return (hash & sample_mask) == 0;
 }
 
 class AdaptivePipelineCache {
 private:
     PipelineCache m_main_cache;
     PipelineCacheProxy m_main_sampled;
-    std::array<PipelineCacheProxy, GhostCaches::NUM_GHOST_CACHES> m_ghost_caches;
+    std::vector<PipelineCacheProxy> m_ghost_caches;
     uint64_t ops_since_last_decision;
 
-public:
-    explicit AdaptivePipelineCache(size_t /*maxsize*/) : m_main_cache{}, m_main_sampled{}, m_ghost_caches{}, ops_since_last_decision{0}
+    std::vector<std::pair<uint64_t, uint64_t>> m_ghost_caches_indeces;
+    std::vector<std::string> m_ghost_caches_names;
+    uint64_t m_num_of_ghost_caches;
+    uint64_t m_seed;
+    uint64_t m_decision_window_size;
+    uint64_t m_sample_mask;
+
+    void populate_ghost_indeces_and_names(uint64_t num_of_blocks, const std::vector<std::string>& cache_types)
     {
-        create_ghost_caches();
+        m_num_of_ghost_caches = num_of_blocks * (num_of_blocks - 1);
+        for (uint64_t i = 0; i < num_of_blocks; ++i)
+        {
+            for (uint64_t j = 0; j < num_of_blocks; ++j)
+            {
+                if (i != j)
+                {
+                    m_ghost_caches_indeces.push_back(std::make_pair(i, j));
+                    const std::string cache_name = std::format("-{}+{}", cache_types[i], cache_types[j]);
+                    m_ghost_caches_names.push_back(cache_name);
+                }
+            }
+        }
+    }
+
+public:
+    explicit AdaptivePipelineCache(std::string config_path) : m_main_cache{config_path},
+                                                              m_main_sampled{config_path},
+                                                              m_ghost_caches{},
+                                                              ops_since_last_decision{0}
+    {
+        std::ifstream config_file(config_path);
+        if (config_file.is_open())
+        {
+            try {
+            Json config = Json::parse(config_file);
+
+            const uint64_t capacity = config["cache"]["capacity"].get<uint64_t>();
+
+            const uint64_t num_of_blocks = config["cache"]["num_of_blocks"].get<uint64_t>();
+            ASSERT(num_of_blocks > 0, "The number of blocks in the config file must be > 0");
+            ASSERT(config["blocks"].size() == num_of_blocks, "Mismatch between the number of blocks and the blocks defined in the config");
+            std::vector<std::string> cache_types;
+            uint64_t total_quanta = 0;
+            for (const auto& block : config["blocks"])
+            {
+                cache_types.push_back(block["type"].get<std::string>());
+                total_quanta += block["initial_quanta"].get<uint64_t>();
+            }
+
+            const uint64_t num_of_quanta = config["cache"]["num_of_quanta"].get<uint64_t>();
+            ASSERT(total_quanta == num_of_quanta, std::format("Total quanta from blocks ({}) must equal num_of_quanta ({})", total_quanta, num_of_quanta));
+            populate_ghost_indeces_and_names(num_of_blocks, cache_types);
+
+            m_seed = config["cache"]["seed"].get<uint64_t>();
+
+            m_decision_window_size = capacity * config["cache"]["decision_window_multiplier"].get<uint64_t>();
+
+            const uint64_t sample_rate = config["cache"]["sample_rate"].get<uint64_t>();
+            ASSERT(utils::is_power_of_two(sample_rate), "The sampling rate should be a power of 2");
+            m_sample_mask = sample_rate - 1;
+            }
+            catch (const Json::exception& e) {
+                std::cerr << "ERROR: Failed to read cache config: " << e.what() << "\n";
+                exit(1);
+            }
+
+            m_ghost_caches.resize(m_num_of_ghost_caches);
+
+            create_ghost_caches();
+
+            config_file.close();
+        } else {
+            std::cerr << "Warning: config.json not found, using default settings" << std::endl;
+        }
+
     }
 
     std::tuple<double, uint64_t> getitem(uint64_t key) 
@@ -54,14 +109,14 @@ public:
         const EntryData& entry = m_main_cache.get_item(key);
         std::tuple<double, uint64_t> item = std::make_tuple(entry.latency, entry.tokens);
         
-        if (should_sample(key))
+        if (should_sample(key, m_seed, m_sample_mask))
         {   
             const double latency = entry.latency;
             const uint64_t tokens = entry.tokens;
 
             perform_op_on_ghost(m_main_sampled, key, latency, tokens);
 
-            for (uint64_t type = 0; type < GhostCaches::NUM_GHOST_CACHES; ++type)
+            for (uint64_t type = 0; type < m_num_of_ghost_caches; ++type)
             {
                 perform_op_on_ghost(m_ghost_caches[type], key, latency, tokens);
             }
@@ -76,17 +131,18 @@ public:
         const auto [latency, tokens] = value;
         m_main_cache.insert_item(key, latency, tokens);
         
-        if (should_sample(key))
+        if (should_sample(key, m_seed, m_sample_mask))
         {   
             perform_op_on_ghost(m_main_sampled, key, latency, tokens);
 
-            for (uint64_t type = 0; type < GhostCaches::NUM_GHOST_CACHES; ++type)
+            for (uint64_t type = 0; type < m_num_of_ghost_caches; ++type)
             {
                 perform_op_on_ghost(m_ghost_caches[type], key, latency, tokens);
             }
         }
 
-        if (ops_since_last_decision >= Constants::DECISION_WINDOW_SIZE && m_main_cache.size() == m_main_cache.capacity())
+        if (ops_since_last_decision >= m_decision_window_size
+            && m_main_cache.size() == m_main_cache.capacity())
         {
             ops_since_last_decision = 0;
             adapt();
@@ -118,7 +174,7 @@ public:
         double minimal_timeframe_ghost_cost = std::numeric_limits<double>::max();
         uint64_t minimal_idx = std::numeric_limits<uint64_t>::max();
 
-        for (uint64_t type = 0; type < GhostCaches::NUM_GHOST_CACHES; ++type)
+        for (uint64_t type = 0; type < m_num_of_ghost_caches; ++type)
         {
             const double curr_ghost_cache_cost = m_ghost_caches[type].get_timeframe_aggregated_cost();
             m_ghost_caches[type].reset_timeframe_stats();
@@ -129,12 +185,12 @@ public:
             }
         }
 
-        assert(minimal_idx < GhostCaches::NUM_GHOST_CACHES
+        assert(minimal_idx < m_num_of_ghost_caches
             && minimal_timeframe_ghost_cost < std::numeric_limits<double>::max());
 
         if (minimal_timeframe_ghost_cost < current_timeframe_cost)
         {
-            const std::pair<uint64_t, uint64_t> indeces_for_adaption = ghost_caches_indeces[minimal_idx];
+            const std::pair<uint64_t, uint64_t> indeces_for_adaption = m_ghost_caches_indeces[minimal_idx];
             assert(m_main_cache.can_adapt(indeces_for_adaption.first, indeces_for_adaption.second));
             m_main_cache.move_quantum(indeces_for_adaption.first, indeces_for_adaption.second);
             m_main_sampled.move_quantum(indeces_for_adaption.first, indeces_for_adaption.second);
@@ -148,9 +204,9 @@ public:
     {
         m_main_sampled.prepare_for_copy();
 
-        for (uint64_t type = 0; type < GhostCaches::NUM_GHOST_CACHES; ++type)
+        for (uint64_t type = 0; type < m_num_of_ghost_caches; ++type)
         {
-            const std::pair<uint64_t, uint64_t> indeces = ghost_caches_indeces[type];
+            const std::pair<uint64_t, uint64_t> indeces = m_ghost_caches_indeces[type];
             m_ghost_caches[type] = m_main_sampled;
             if (m_main_sampled.can_adapt(indeces.first, false) && m_main_sampled.can_adapt(indeces.second, true))
             {
@@ -205,7 +261,7 @@ public:
     {
         m_main_cache.clear();
         m_main_sampled.clear();
-        for (uint64_t type = 0; type < GhostCaches::NUM_GHOST_CACHES; ++type)
+        for (uint64_t type = 0; type < m_num_of_ghost_caches; ++type)
         {
             m_ghost_caches[type].clear();
         }

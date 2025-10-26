@@ -6,10 +6,14 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
 endif()
 
+set(PYBIND11_FINDPYTHON ON)
 find_package(pybind11 REQUIRED)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Set minimum policy version to work with older dependencies like xxHash
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 # Use FetchContent to automatically download xxHash if not present
 include(FetchContent)
@@ -40,7 +44,18 @@ FetchContent_Declare(
     GIT_TAG v2.1.0
 )
 
+# Enable PIC for libassert before building
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 FetchContent_MakeAvailable(libassert)
+
+# Set PIC on all libassert targets
+if(TARGET libassert-lib)
+    set_target_properties(libassert-lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
+if(TARGET cpptrace-lib)
+    set_target_properties(cpptrace-lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
 
 add_library(pipeline_cache_core STATIC
     src/adaptive_pipeline_cache.cpp
@@ -59,7 +74,7 @@ target_include_directories(pipeline_cache_core
     PUBLIC ${CMAKE_SOURCE_DIR}/src
 )
 target_link_libraries(pipeline_cache_core
-    PRIVATE xxHash::xxhash nlohmann_json::nlohmann_json assert
+    PUBLIC xxHash::xxhash nlohmann_json::nlohmann_json libassert::assert
 )
 
 pybind11_add_module(_adaptive_pipeline_cache_impl
@@ -79,3 +94,26 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS _adaptive_pipeline_cache_impl DESTINATION adaptive_pipeline)
+
+# Custom cleanup target to remove build artifacts, dist, and compiled code
+add_custom_target(distclean
+    COMMAND ${CMAKE_COMMAND} -E echo "Cleaning build artifacts..."
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_SOURCE_DIR}/build
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_SOURCE_DIR}/dist
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_SOURCE_DIR}/_deps
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_SOURCE_DIR}/CMakeFiles
+    COMMAND ${CMAKE_COMMAND} -E remove -f ${CMAKE_SOURCE_DIR}/CMakeCache.txt
+    COMMAND ${CMAKE_COMMAND} -E remove -f ${CMAKE_SOURCE_DIR}/cmake_install.cmake
+    COMMAND ${CMAKE_COMMAND} -E remove -f ${CMAKE_SOURCE_DIR}/Makefile
+    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_SOURCE_DIR}/*.egg-info
+    COMMAND ${CMAKE_COMMAND} -E rm -f ${CMAKE_SOURCE_DIR}/*.so
+    COMMAND ${CMAKE_COMMAND} -E rm -f ${CMAKE_SOURCE_DIR}/*.dylib
+    COMMAND ${CMAKE_COMMAND} -E rm -f ${CMAKE_SOURCE_DIR}/*.pyd
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_SOURCE_DIR}/__pycache__
+    COMMAND ${CMAKE_COMMAND} -E rm -f ${CMAKE_SOURCE_DIR}/cache-ops.log
+    COMMAND ${CMAKE_COMMAND} -E rm -f ${CMAKE_SOURCE_DIR}/movement-log-*.log
+    COMMAND ${CMAKE_COMMAND} -E echo "Cleanup complete: removed build/, dist/, and all compiled code"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Cleaning up build directory, dist directory, and all compiled code"
+    VERBATIM
+)

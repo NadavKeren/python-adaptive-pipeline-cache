@@ -5,6 +5,7 @@
 #include <optional>
 #include <vector>
 #include <iostream>
+#include <libassert/assert.hpp>
 
 #include "utils.cpp"
 #include "fixed_size_array.hpp"
@@ -34,12 +35,12 @@ public:
 
     virtual FixedSizeArray<EntryData>& get_arr() = 0;
     virtual std::pair<uint64_t, std::optional<EntryData>> insert_item(EntryData item) = 0;
-    virtual uint64_t size() const = 0;
-    virtual uint64_t capacity() const = 0;
-    virtual bool is_full() const = 0;
+    [[nodiscard]] virtual uint64_t size() const = 0;
+    [[nodiscard]] virtual uint64_t capacity() const = 0;
+    [[nodiscard]] virtual bool is_full() const = 0;
     virtual EntryData* get_entry(uint64_t idx) = 0;
     virtual void prepare_for_copy() = 0;
-    virtual std::string get_type() const = 0;
+    [[nodiscard]] virtual std::string get_type() const = 0;
     virtual void clear() = 0;
 };
 
@@ -72,8 +73,8 @@ public:
     BasePipelineBlock& operator=(const BasePipelineBlock& other)
     {
         m_arr = other.m_arr;
-        assert(m_cache_max_capacity == other.m_cache_max_capacity);
-        assert(m_quantum_size == other.m_quantum_size);
+        ASSERT(m_cache_max_capacity == other.m_cache_max_capacity);
+        ASSERT(m_quantum_size == other.m_quantum_size);
         m_curr_max_capacity = other.m_curr_max_capacity;
 
         return *this;
@@ -85,12 +86,12 @@ public:
     NewLocationData accept_quanta(FixedSizeArray<EntryData>& arr) override
     {
         this->m_curr_max_capacity += this->m_quantum_size;
-        assert(this->m_curr_max_capacity <= this->m_cache_max_capacity);
+        ASSERT(this->m_curr_max_capacity <= this->m_cache_max_capacity);
 
         NewLocationData locations{};
         if (!arr.empty())
         {
-            assert(arr.size() + this->m_quantum_size <= arr.capacity());
+            ASSERT(arr.size() + this->m_quantum_size <= arr.capacity());
             this->m_arr.rotate();
             
             const uint64_t dest_start_idx = m_arr.size();
@@ -116,13 +117,8 @@ public:
 
     EntryData* get_entry(uint64_t idx) override 
     {
-        assert(idx >= 0 && idx < m_arr.size());
+        ASSERT(idx >= 0 && idx < m_arr.size());
         return m_arr.get_item(idx);
-    }
-
-    void prepare_for_copy() override
-    {
-        m_arr.rotate();
     }
 
     std::string get_type() const override { return m_type; }

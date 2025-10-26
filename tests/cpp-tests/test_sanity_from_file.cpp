@@ -10,7 +10,7 @@
 int main() {
     const std::string input_file = "input.trace";
 
-    AdaptivePipelineCache cache(1024);
+    AdaptivePipelineCache cache("config.json");
 
     std::cout << "\n--- AdaptivePipelineCache Sanity Test Start ---\n";
 

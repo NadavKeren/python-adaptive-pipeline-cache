@@ -2,38 +2,28 @@
 #include <cstdint>
 #include <limits>
 #include <sstream>
-#include <iostream>
+#include <fstream>
+#include <stdexcept>
+#include <format>
 
-#include "constants.hpp"
+#include <nlohmann/json.hpp>
+#include <libassert/assert.hpp>
+
 #include "pipeline_cache.hpp"
-#include "fixed_size_array.hpp"
+
 #include "pipeline_block.hpp"
 #include "utils.cpp"
 
-uint64_t PipelineCache::UID = 0;
+#include "fifo_block.cpp"
+#include "approximate_lru_block.cpp"
+#include "cost_aware_lfu_block.cpp"
+
+using Json = nlohmann::json;
 
 IPipelineCache::~IPipelineCache() = default;
 
-PipelineCache::PipelineCache() : PipelineCache(false) {}
-
-PipelineCache::PipelineCache(bool is_sampled)
-                            : m_cache_capacity {!is_sampled ? Constants::PIPELINE_CACHE_CAPACITY : Constants::SAMPLED_CACHE_CAPACITY},
-                              m_quantum_size{!is_sampled ? Constants::QUANTUM_SIZE : Constants::SAMPLED_QUANTUM_SIZE},
-                              m_items{m_cache_capacity * 2},
-                              m_blocks{},
-                              m_quanta_alloc{2, 6, 8},
-                              m_eviction_queue{},
-                              m_sketch{Constants::SKETCH_ERROR, Constants::SKETCH_PROB},
-                              m_ops_since_last_aging(0),
-                              m_stats{},
-                              uid{UID++}
-{
-    const uint64_t quantum_size = !is_sampled ? Constants::QUANTUM_SIZE : Constants::SAMPLED_QUANTUM_SIZE;
-    m_blocks[0] = std::make_unique<FIFOBlock>(m_cache_capacity, quantum_size, m_quanta_alloc[0]);
-    m_blocks[1] = std::make_unique<ALRUBlock>(m_cache_capacity, quantum_size, m_quanta_alloc[1]);
-    m_blocks[2] = std::make_unique<CostAwareLFUBlock>(m_cache_capacity, quantum_size, m_quanta_alloc[2], m_sketch);
-    ++UID;
-}
+PipelineCache::PipelineCache() : m_cache_capacity(0), m_quantum_size(0), m_num_of_quanta(0) {}
+PipelineCache::PipelineCache(const std::string& config_path) : PipelineCache(false, config_path) {}
 
 PipelineCache::PipelineCache(const PipelineCache& other) : m_cache_capacity {other.m_cache_capacity},
                                                            m_quantum_size{other.m_quantum_size},
@@ -41,39 +31,63 @@ PipelineCache::PipelineCache(const PipelineCache& other) : m_cache_capacity {oth
                                                            m_blocks{},
                                                            m_quanta_alloc{other.m_quanta_alloc},
                                                            m_eviction_queue{},
+                                                           m_num_of_quanta(other.m_num_of_quanta),
                                                            m_sketch{other.m_sketch},
+                                                           m_aging_window_size(other.m_aging_window_size),
                                                            m_ops_since_last_aging{0},
-                                                           m_stats{},
-                                                           uid{UID++}
+                                                           m_stats{}
 {
-    m_blocks[0] = std::make_unique<FIFOBlock>(*dynamic_cast<FIFOBlock*>(other.m_blocks[0].get()));
-    m_blocks[1] = std::make_unique<ALRUBlock>(*dynamic_cast<ALRUBlock*>(other.m_blocks[1].get()));
-    m_blocks[2] = std::make_unique<CostAwareLFUBlock>(*dynamic_cast<CostAwareLFUBlock*>(other.m_blocks[2].get()));
+    m_blocks.resize(other.m_blocks.size());
+
+    for (size_t i = 0; i < other.m_blocks.size(); ++i) {
+        const std::string block_type = other.m_blocks[i]->get_type();
+
+        if (block_type == "FIFO") {
+            m_blocks[i] = std::make_unique<FIFOBlock>(*dynamic_cast<FIFOBlock*>(other.m_blocks[i].get()));
+        } else if (block_type == "ALRU") {
+            m_blocks[i] = std::make_unique<ALRUBlock>(*dynamic_cast<ALRUBlock*>(other.m_blocks[i].get()));
+        } else if (block_type == "CostAwareLFU") {
+            m_blocks[i] = std::make_unique<CostAwareLFUBlock>(*dynamic_cast<CostAwareLFUBlock*>(other.m_blocks[i].get()));
+        } else {
+            throw std::runtime_error("Unknown block type during copy: " + block_type);
+        }
+    }
 
     validate_sizes();
-    ++UID;
 }
 
 PipelineCache& PipelineCache::operator=(const PipelineCache& other)
 {
-    assert(this != &other);
-    assert(m_cache_capacity == other.m_cache_capacity);
-    assert(m_quantum_size == other.m_quantum_size);
-    
-    m_items = other.m_items;
-    
-    m_blocks[0] = std::make_unique<FIFOBlock>(*dynamic_cast<FIFOBlock*>(other.m_blocks[0].get()));
-    m_blocks[1] = std::make_unique<ALRUBlock>(*dynamic_cast<ALRUBlock*>(other.m_blocks[1].get()));
-    m_blocks[2] = std::make_unique<CostAwareLFUBlock>(*dynamic_cast<CostAwareLFUBlock*>(other.m_blocks[2].get()));
+    ASSERT(this != &other);
+    ASSERT(!other.m_blocks.empty(), std::format("Cannot copy from PipelineCache with empty m_blocks. other.m_blocks.size()={}", other.m_blocks.size()));
 
-    for (uint64_t idx = 0; idx < Constants::NUM_OF_BLOCKS; ++idx)
-    {
-        assert(m_blocks[idx]->capacity() == other.m_blocks[idx]->capacity());
-        assert(m_blocks[idx]->size() == other.m_blocks[idx]->size());
+    m_cache_capacity = other.m_cache_capacity;
+    m_quantum_size = other.m_quantum_size;
+    m_num_of_quanta = other.m_num_of_quanta;
+
+    m_items = other.m_items;
+
+    m_blocks.resize(other.m_blocks.size());
+
+    for (size_t i = 0; i < other.m_blocks.size(); ++i) {
+        const std::string block_type = other.m_blocks[i]->get_type();
+
+        if (block_type == "FIFO") {
+            m_blocks[i] = std::make_unique<FIFOBlock>(*dynamic_cast<FIFOBlock*>(other.m_blocks[i].get()));
+        } else if (block_type == "ALRU") {
+            m_blocks[i] = std::make_unique<ALRUBlock>(*dynamic_cast<ALRUBlock*>(other.m_blocks[i].get()));
+        } else if (block_type == "CostAwareLFU") {
+            m_blocks[i] = std::make_unique<CostAwareLFUBlock>(*dynamic_cast<CostAwareLFUBlock*>(other.m_blocks[i].get()));
+        } else {
+            throw std::runtime_error("Unknown block type during copy assignment: " + block_type);
+        }
+
+        ASSERT(m_blocks[i]->capacity() == other.m_blocks[i]->capacity());
+        ASSERT(m_blocks[i]->size() == other.m_blocks[i]->size());
     }
 
     m_quanta_alloc = other.m_quanta_alloc;
-    m_eviction_queue = std::queue<EntryData>{};
+    m_eviction_queue = std::vector<EntryData>();
     m_sketch = other.m_sketch;
     m_ops_since_last_aging = 0;
     m_stats = {};
@@ -85,9 +99,9 @@ PipelineCache& PipelineCache::operator=(const PipelineCache& other)
 
 const EntryData& PipelineCache::get_item(uint64_t key)
 {
-    assert(contains(key));
+    ASSERT(contains(key));
     const EntryPosition& pos = m_items[key];
-    assert(pos.id == key);
+    ASSERT(pos.id == key);
 
     EntryData* item_entry = m_blocks[pos.block_num]->get_entry(pos.idx);
 
@@ -105,18 +119,18 @@ void PipelineCache::insert_item(uint64_t key, double latency, uint64_t tokens)
     EntryData item{key, latency, tokens};
     m_sketch.add(key);
     ++m_ops_since_last_aging;
-    m_stats.aggregated_cost += latency * tokens;
+    m_stats.aggregated_cost += latency * static_cast<double>(tokens);
     ++m_stats.ops;
 
     bool was_item_evicted = true;
-    for (uint64_t idx = 0; idx < Constants::NUM_OF_BLOCKS && was_item_evicted; ++idx)
+    for (size_t idx = 0; idx < m_blocks.size() && was_item_evicted; ++idx)
     {
         if (m_quanta_alloc[idx] > 0)
         {
             auto res = m_blocks[idx]->insert_item(item);
             if (res.first != std::numeric_limits<uint64_t>::max())
             {
-                assert(res.first < m_blocks[idx]->capacity());
+                ASSERT(res.first < m_blocks[idx]->capacity());
                 m_items.insert_or_assign(item.id, EntryPosition{item.id, idx, res.first});
 
                 was_item_evicted = res.second.has_value();
@@ -132,16 +146,109 @@ void PipelineCache::insert_item(uint64_t key, double latency, uint64_t tokens)
     {
         m_items.erase(item.id);
 
-        m_eviction_queue.push(item);
+        m_eviction_queue.push_back(item);
     }
 
     validate_sizes();
     age_sketch_if_needed();
 }
 
+PipelineCache::PipelineCache(bool is_sampled, const std::string& config_path)
+    : m_cache_capacity{0},
+      m_quantum_size{0},
+      m_items{},
+      m_blocks{},
+      m_quanta_alloc{},
+      m_eviction_queue{},
+      m_num_of_quanta{0},
+      m_sketch{},
+      m_aging_window_size{0},
+      m_ops_since_last_aging{0},
+      m_stats{}
+{
+    std::ifstream config_file(config_path);
+    if (!config_file.is_open()) { ASSERT(false, "Failed to open config file: " + config_path); }
+
+    Json config = Json::parse(config_file);
+
+    const auto& blocks_config = config["blocks"];
+    const size_t num_blocks = blocks_config.size();
+
+    m_blocks.resize(num_blocks);
+    m_quanta_alloc.resize(num_blocks);
+
+    try
+    {
+        m_num_of_quanta = config["cache"]["num_of_quanta"].get<uint64_t>();
+        ASSERT(utils::is_power_of_two(m_num_of_quanta));
+        m_cache_capacity = config["cache"]["capacity"].get<uint64_t>();
+        ASSERT(utils::is_power_of_two(m_cache_capacity));
+        const uint64_t non_sampled_quantum_size = m_cache_capacity / m_num_of_quanta;
+        const uint64_t sample_rate = config["cache"]["sample_rate"].get<uint64_t>();
+        ASSERT(utils::is_power_of_two(sample_rate));
+
+        const uint64_t aging_window_multiplier = config["cache"]["aging_window_multiplier"].get<uint64_t>();
+        m_aging_window_size = aging_window_multiplier * m_cache_capacity;
+
+        m_quantum_size = !is_sampled
+                             ? non_sampled_quantum_size
+                             : non_sampled_quantum_size / sample_rate;
+
+        const uint64_t seed = config["cache"]["seed"].get<uint64_t>();
+        const uint64_t sample_size = config["cache"]["sample_size"].get<uint64_t>();
+
+        const double sketch_error = config["count_min_sketch"]["error"].get<double>();
+        const double sketch_error_probability = config["count_min_sketch"]["probability"].get<double>();
+        m_sketch = CountMinSketch{sketch_error, sketch_error_probability, seed};
+
+        for (size_t i = 0; i < num_blocks; ++i)
+        {
+            const auto& block_config = blocks_config[i];
+            const std::string block_type = block_config["type"];
+            const uint64_t initial_quanta = block_config["initial_quanta"].get<uint64_t>();
+
+            m_quanta_alloc[i] = initial_quanta;
+            ASSERT(initial_quanta >= 0 && initial_quanta <= m_num_of_quanta);
+
+            if (block_type == "fifo")
+            {
+                m_blocks[i] = std::make_unique<FIFOBlock>(m_cache_capacity, m_quantum_size, initial_quanta);
+            }
+            else if (block_type == "alru")
+            {
+                m_blocks[i] = std::make_unique<ALRUBlock>(m_cache_capacity,
+                                                          m_quantum_size,
+                                                          initial_quanta,
+                                                          seed,
+                                                          sample_size);
+            }
+            else if (block_type == "cost_aware_lfu")
+            {
+                m_blocks[i] = std::make_unique<CostAwareLFUBlock>(m_cache_capacity,
+                                                                  m_quantum_size,
+                                                                  initial_quanta,
+                                                                  m_sketch,
+                                                                  seed,
+                                                                  sample_size);
+            }
+            else
+            {
+                ASSERT(false, std::format("No block type: {}", block_type));
+            }
+        }
+    }
+    catch (const Json::exception& e) {
+        std::cerr << "ERROR: Failed to read cache config: " << e.what() << "\n";
+        exit(1);
+    }
+
+
+    config_file.close();
+}
+
 void PipelineCache::age_sketch_if_needed()
 {
-    if (m_ops_since_last_aging >= Constants::AGING_WINDOW_SIZE * m_cache_capacity)
+    if (m_ops_since_last_aging >= m_aging_window_size)
     {
         m_ops_since_last_aging = 0;
         m_sketch.reduce();
@@ -151,30 +258,30 @@ void PipelineCache::age_sketch_if_needed()
 void PipelineCache::validate_sizes() const
 {
     uint64_t num_of_items = 0;
-    for (uint64_t idx = 0; idx < Constants::NUM_OF_BLOCKS; ++idx) 
+    for (size_t idx = 0; idx < m_blocks.size(); ++idx)
     {
         const uint64_t blk_size = m_blocks[idx]->size();
         const uint64_t blk_capacity = m_blocks[idx]->capacity();
-        assert(blk_size <= m_quanta_alloc[idx] * m_quantum_size);
-        assert(blk_capacity == m_quanta_alloc[idx] * m_quantum_size);
+        ASSERT(blk_size <= m_quanta_alloc[idx] * m_quantum_size);
+        ASSERT(blk_capacity == m_quanta_alloc[idx] * m_quantum_size);
         num_of_items += blk_size;
     }
 
-    assert(num_of_items <= m_cache_capacity);
-    assert(size() == num_of_items);
-    assert(m_items.size() == num_of_items);
+    ASSERT(num_of_items <= m_cache_capacity);
+    ASSERT(size() == num_of_items);
+    ASSERT(m_items.size() == num_of_items);
 }
 
 bool PipelineCache::contains(uint64_t key) const 
 {
-    return m_items.find(key) != m_items.end();
+    return m_items.contains(key);
 }
 
 EntryData PipelineCache::evict_item() 
 {
-    assert(!m_eviction_queue.empty());
-    EntryData item = m_eviction_queue.front();
-    m_eviction_queue.pop();
+    ASSERT(!m_eviction_queue.empty());
+    EntryData item = m_eviction_queue.back();
+    m_eviction_queue.pop_back();
     return item;
 }
 
@@ -185,11 +292,11 @@ bool PipelineCache::should_evict() const
 
 void PipelineCache::move_quantum(uint64_t src_block, uint64_t dest_block)
 {
-    for (uint64_t idx = 0; idx < Constants::NUM_OF_BLOCKS; ++idx)
+    for (const auto & m_block : m_blocks)
     {
-        m_blocks[idx]->prepare_for_copy();
+        m_block->prepare_for_copy();
     }
-    assert(can_adapt(src_block, false) && can_adapt(dest_block, true));
+    ASSERT(can_adapt(src_block, false) && can_adapt(dest_block, true));
     QuantumMoveResult result = m_blocks[src_block]->move_quanta_to(*m_blocks.at(dest_block));
 
     // Update positions for items that moved to destination block
@@ -211,10 +318,9 @@ void PipelineCache::move_quantum(uint64_t src_block, uint64_t dest_block)
 std::vector<uint64_t> PipelineCache::keys() const 
 {
     std::vector<uint64_t> res{size()};
-    for (const auto& item : m_items) 
+    for (const auto& val : m_items | std::views::values)
     {
-        const EntryData* data = m_blocks[item.second.block_num]->get_entry(item.second.idx);
-        res.emplace_back(item.second.id);
+        res.emplace_back(val.id);
     }
 
     return res;
@@ -223,9 +329,9 @@ std::vector<uint64_t> PipelineCache::keys() const
 std::vector<std::tuple<double, uint64_t>> PipelineCache::values() const
 {
     std::vector<std::tuple<double, uint64_t>> res{size()};
-    for (const auto& item : m_items) 
+    for (const auto& val : m_items | std::views::values)
     {
-        const EntryData* data = m_blocks[item.second.block_num]->get_entry(item.second.idx);
+        const EntryData* data = m_blocks[val.block_num]->get_entry(val.idx);
         res.emplace_back(data->latency, data->tokens);
     }
 
@@ -237,12 +343,12 @@ size_t PipelineCache::capacity() const
     return m_cache_capacity;
 }
 
-size_t PipelineCache::size() const 
+size_t PipelineCache::size() const
 {
     size_t curr_size = 0;
-    for (uint64_t idx = 0; idx < Constants::NUM_OF_BLOCKS; ++idx)
-    {   
-        curr_size += m_blocks[idx]->size();
+    for (const auto & m_block : m_blocks)
+    {
+        curr_size += m_block->size();
     }
 
     return curr_size;
@@ -256,16 +362,16 @@ bool PipelineCache::empty() const
 
 void PipelineCache::clear()
 {
-    for (uint64_t idx = 0; idx < Constants::NUM_OF_BLOCKS; ++idx)
+    for (const auto & m_block : m_blocks)
     {
-        m_blocks[idx]->clear();
+        m_block->clear();
     }
 }
 
 bool PipelineCache::can_adapt(uint64_t block_num, bool increase) const 
 {
     return increase 
-           ? m_quanta_alloc[block_num] < Constants::NUM_OF_QUONTA 
+           ? m_quanta_alloc[block_num] < m_num_of_quanta
            : m_quanta_alloc[block_num] > 0;
 }
 
@@ -273,7 +379,13 @@ std::string PipelineCache::get_current_config() const
 {
     std::stringstream ss;
 
-    ss << "FIFO: " << m_quanta_alloc[0] << ", ALRU: " << m_quanta_alloc[1] << ", CA-LFU: " << m_quanta_alloc[2] << "\n";
+    for (size_t i = 0; i < m_blocks.size(); ++i) {
+        if (i > 0) {
+            ss << ", ";
+        }
+        ss << m_blocks[i]->get_type() << ": " << m_quanta_alloc[i];
+    }
+    ss << "\n";
 
     return ss.str();
 }
@@ -290,9 +402,11 @@ void PipelineCache::prepare_for_copy()
 }
 
 
-PipelineCacheProxy::PipelineCacheProxy()
+PipelineCacheProxy::PipelineCacheProxy() {}
+
+PipelineCacheProxy::PipelineCacheProxy(const std::string& config_path)
                 : IPipelineCache(),
-                  m_cache{true},
+                  m_cache{true, config_path},
                   is_in_dummy_mode{false} {}
 
 PipelineCacheProxy::PipelineCacheProxy(const PipelineCacheProxy& other)

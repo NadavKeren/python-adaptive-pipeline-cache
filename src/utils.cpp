@@ -11,7 +11,7 @@ namespace utils {
         );
     }
 
-    inline constexpr bool isPowerOfTwo(unsigned int n) 
+    inline constexpr bool is_power_of_two(unsigned int n) 
     {
         return (n > 0) && ((n & (n - 1)) == 0);
     }

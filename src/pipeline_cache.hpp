@@ -1,18 +1,14 @@
 #pragma once
 #include <cassert>
 #include <cstdint>
-#include <array>
 #include <unordered_map>
-#include <queue>
 #include <string>
 #include <memory>
-#include <fstream>
+#include <vector>
+
+#include "count_min_sketch.hpp"
 #include "pipeline_block.hpp"
-#include "fixed_size_array.hpp"
-#include "constants.hpp"
-#include "fifo_block.cpp"
-#include "approximate_lru_block.cpp"
-#include "cost_aware_lfu_block.cpp"
+
 
 struct EntryPosition {
     uint64_t id;
@@ -25,19 +21,19 @@ public:
     virtual ~IPipelineCache();
     virtual const EntryData& get_item(uint64_t key) = 0;
     virtual void insert_item(uint64_t key, double latency, uint64_t tokens) = 0;
-    virtual bool contains(uint64_t key) const = 0;
+    [[nodiscard]] virtual bool contains(uint64_t key) const = 0;
     virtual EntryData evict_item() = 0;
-    virtual bool should_evict() const = 0;
+    [[nodiscard]] virtual bool should_evict() const = 0;
     virtual void move_quantum(uint64_t src_block, uint64_t dest_block) = 0;
 
-    virtual std::vector<uint64_t> keys() const = 0;
-    virtual std::vector<std::tuple<double, uint64_t>> values() const = 0;
-    virtual size_t capacity() const = 0;
-    virtual size_t size() const = 0;
-    virtual bool empty() const = 0;
+    [[nodiscard]] virtual std::vector<uint64_t> keys() const = 0;
+    [[nodiscard]] virtual std::vector<std::tuple<double, uint64_t>> values() const = 0;
+    [[nodiscard]] virtual size_t capacity() const = 0;
+    [[nodiscard]] virtual size_t size() const = 0;
+    [[nodiscard]] virtual bool empty() const = 0;
     virtual void clear() = 0;
-    virtual bool can_adapt(uint64_t block_num, bool increase) const = 0;
-    virtual double get_timeframe_aggregated_cost() const = 0;
+    [[nodiscard]] virtual bool can_adapt(uint64_t block_num, bool increase) const = 0;
+    [[nodiscard]] virtual double get_timeframe_aggregated_cost() const = 0;
     virtual void reset_timeframe_stats() = 0;
     virtual void prepare_for_copy() = 0;
 };
@@ -56,29 +52,29 @@ private:
             aggregated_cost = 0.0;
         }
 
-        double get_average_cost() const {
-            return ops > 0 ? aggregated_cost / ops : std::numeric_limits<double>::max();
+        [[nodiscard]] double get_average_cost() const {
+            return ops > 0 ? aggregated_cost / static_cast<double>(ops) : std::numeric_limits<double>::max();
         }
     };
 
     void age_sketch_if_needed();
 
-    const uint64_t m_cache_capacity;
-    const uint64_t m_quantum_size;
+    uint64_t m_cache_capacity;
+    uint64_t m_quantum_size;
     std::unordered_map<uint64_t, EntryPosition> m_items;
-    std::array<std::unique_ptr<PipelineBlock>, Constants::NUM_OF_BLOCKS> m_blocks;
-    std::array<uint64_t, Constants::NUM_OF_BLOCKS> m_quanta_alloc;
-    std::queue<EntryData> m_eviction_queue;
+    std::vector<std::unique_ptr<PipelineBlock>> m_blocks;
+    std::vector<uint64_t> m_quanta_alloc;
+    std::vector<EntryData> m_eviction_queue;
+    uint64_t m_num_of_quanta;
     CountMinSketch m_sketch;
+    uint64_t m_aging_window_size = 0;
     uint64_t m_ops_since_last_aging = 0;
-    PipelineCache::TimeframeStats m_stats;
+    TimeframeStats m_stats;
 
-    const uint64_t uid;
-
-    static uint64_t UID;
 public:
-    explicit PipelineCache();
-    explicit PipelineCache(bool is_sampled);
+    PipelineCache();
+    explicit PipelineCache(const std::string& config_path);
+    explicit PipelineCache(bool is_sampled, const std::string& config_path);
     PipelineCache(const PipelineCache& other);
     PipelineCache& operator=(const PipelineCache& other);
 
@@ -113,6 +109,7 @@ private:
     bool is_in_dummy_mode;
 public:
     PipelineCacheProxy();
+    explicit PipelineCacheProxy(const std::string& config_path);
     PipelineCacheProxy(const PipelineCacheProxy& other);
     PipelineCacheProxy& operator=(const PipelineCacheProxy& other);
 

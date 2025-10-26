@@ -3,22 +3,27 @@
 #include <cstdint>
 #include <random>
 #include <algorithm>
-#include <iostream>
+#include <libassert/assert.hpp>
 
-#include "constants.hpp"
 #include "pipeline_block.hpp"
 
 class ALRUBlock : public BasePipelineBlock {
 private:
     std::mt19937 m_generator;
+    const uint64_t m_sample_size;
 
 public:
-    explicit ALRUBlock(uint64_t capacity, uint64_t quantum_size, uint64_t quanta_allocation)
+    explicit ALRUBlock(uint64_t capacity,
+                       uint64_t quantum_size,
+                       uint64_t quanta_allocation,
+                       uint64_t seed,
+                       uint64_t sample_size)
             : BasePipelineBlock{capacity, quantum_size, quanta_allocation, "ALRU"},
-              m_generator{Constants::RANDOM_SEED}
+              m_generator{seed},
+              m_sample_size(sample_size)
               {}
 
-    ALRUBlock(const ALRUBlock& other) : BasePipelineBlock(other), m_generator(other.m_generator) {}
+    ALRUBlock(const ALRUBlock& other) = default;
 
     ALRUBlock& operator=(const ALRUBlock& other)
     {
@@ -31,15 +36,8 @@ public:
     }
 
     QuantumMoveResult move_quanta_to(PipelineBlock& other) override {
-        assert(m_arr.size() == m_curr_max_capacity || m_arr.empty());
-        assert(m_curr_max_capacity >= m_quantum_size);
-
-        m_arr.rotate();
-        EntryData* data = m_arr.data();
-        std::nth_element(data, data + (m_arr.size() - m_quantum_size), data + m_arr.size(),
-            [](const EntryData& a, const EntryData& b) {
-                return a.last_access_time < b.last_access_time;
-            });
+        ASSERT(m_arr.size() == m_curr_max_capacity || m_arr.empty());
+        ASSERT(m_curr_max_capacity >= m_quantum_size);
 
         QuantumMoveResult result;
         result.items_moved = other.accept_quanta(m_arr);
@@ -67,7 +65,7 @@ public:
         uint64_t idx_to_remove = start_idx;
         uint64_t oldest_timestamp = m_arr[start_idx].last_access_time;
 
-        for (uint64_t i = 0; i < Constants::NUM_OF_ITEM_TO_SAMPLE; ++i) {
+        for (uint64_t i = 0; i < m_sample_size; ++i) {
             EntryData entry = *itr;
             ++itr;
             if (entry.last_access_time < oldest_timestamp) {
@@ -83,5 +81,16 @@ public:
 
         EntryData evicted_item = m_arr.replace(idx_to_remove, item);
         return std::make_pair(idx_to_remove, evicted_item);
+    }
+
+    void prepare_for_copy() override
+    {
+        m_arr.rotate();
+
+        EntryData* data = m_arr.data();
+        std::nth_element(data, data + (m_arr.size() - m_quantum_size), data + m_arr.size(),
+            [](const EntryData& a, const EntryData& b) {
+                return a.last_access_time < b.last_access_time;
+            });
     }
 };
