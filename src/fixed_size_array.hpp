@@ -22,10 +22,10 @@ public:
 
     FixedSizeArray(const FixedSizeArray& other) 
     {
-        ASSERT(!other.is_rotated());
+        DEBUG_ASSERT(!other.is_rotated());
         if (m_data != nullptr) 
         {
-            ASSERT(m_capacity == other.m_capacity);
+            DEBUG_ASSERT(m_capacity == other.m_capacity);
         }
         else
         {
@@ -37,16 +37,16 @@ public:
         m_head = other.m_head;
         m_tail = other.m_tail;
         std::memcpy(m_data, other.m_data, m_size * sizeof(T));
-        ASSERT(m_tail == m_head + m_size);
+        DEBUG_ASSERT(m_tail == m_head + m_size);
     }
 
     FixedSizeArray& operator=(const FixedSizeArray& other) 
     {
-        ASSERT(!other.is_rotated());
+        DEBUG_ASSERT(!other.is_rotated());
         if (this != &other) {
             if (m_data != nullptr) 
             {
-                ASSERT(m_capacity == other.m_capacity);
+                DEBUG_ASSERT(m_capacity == other.m_capacity);
             }
             else 
             {
@@ -58,7 +58,7 @@ public:
             m_head = other.m_head;
             m_tail = other.m_tail;
             std::memcpy(m_data, other.m_data, m_size * sizeof(T));
-            ASSERT(m_tail == m_head + m_size);
+            DEBUG_ASSERT(m_tail == m_head + m_size);
         }
         return *this;
     }
@@ -70,7 +70,7 @@ public:
         m_data = other.m_data;
         m_head = 0;
         m_tail = m_size;
-        ASSERT(this->m_capacity == other.m_capacity);
+        DEBUG_ASSERT(this->m_capacity == other.m_capacity);
 
         other.m_data = nullptr;
         other.m_capacity = -1;
@@ -100,42 +100,42 @@ public:
 
     void push_tail(const T& value) 
     {
-        ASSERT(!is_full());
+        DEBUG_ASSERT(!is_full());
         
         m_data[m_tail] = value;
         m_tail = (m_tail + 1) < m_capacity ? m_tail + 1 : 0;
         ++m_size;
 
-        ASSERT(calc_size() == m_size);
+        DEBUG_ASSERT(calc_size() == m_size, m_tail, m_head, m_size, m_capacity);
     }
 
     T pop_head() 
     {
-        ASSERT(!empty());
+        DEBUG_ASSERT(!empty());
         
         T value = m_data[m_head];
         m_head = (m_head + 1) < m_capacity ? m_head + 1 : 0;
         --m_size;
 
-        ASSERT(calc_size() == m_size);
+        DEBUG_ASSERT(calc_size() == m_size, m_tail, m_head, m_size, m_capacity);
         return value;
     }
 
     T& operator[](uint64_t index) 
     {
-        ASSERT(index < m_capacity);
+        DEBUG_ASSERT(index < m_capacity);
         return m_data[find_index(index)];
     }
 
     const T& operator[](uint64_t index) const 
     {
-        ASSERT(index < m_capacity);
+        DEBUG_ASSERT(index < m_capacity);
         return m_data[find_index(index)];
     }
 
     T* get_item(uint64_t index) 
     {
-        ASSERT(index <= m_capacity);
+        DEBUG_ASSERT(index <= m_capacity);
         return &m_data[find_index(index)];
     }
 
@@ -146,13 +146,13 @@ public:
 
     T replace(uint64_t index, const T& value) 
     {
-        ASSERT(index < m_size);
+        DEBUG_ASSERT(index < m_size);
         
         uint64_t real_index = find_index(index);
         T old_value = m_data[real_index];
         m_data[real_index] = value;
 
-        ASSERT(calc_size() == m_size);
+        DEBUG_ASSERT(calc_size() == m_size, m_tail, m_head, m_size, m_capacity);
 
         return old_value;
     }
@@ -181,8 +181,10 @@ public:
     {
         if (!this->empty())
         {
-            ASSERT(count <= m_size || count + other.m_size > other.m_capacity);
-            ASSERT(m_head == 0 && m_tail == m_head + m_size || this->is_full());
+            DEBUG_ASSERT(calc_size() == m_size, m_tail, m_head, m_size, m_capacity);
+            DEBUG_ASSERT(other.calc_size() == other.m_size, other.m_tail, other.m_head, other.m_size, other.m_capacity);
+            DEBUG_ASSERT(count <= m_size || count + other.m_size > other.m_capacity);
+            DEBUG_ASSERT(m_head == 0 && m_tail == m_head + m_size || this->is_full());
             
             std::memcpy(other.m_data + other.m_size, m_data, count * sizeof(T));
             other.m_size += count;
@@ -190,6 +192,8 @@ public:
             m_head += count;
             m_size -= count;
             this->rotate();
+            DEBUG_ASSERT(calc_size() == m_size, m_tail, m_head, m_size, m_capacity);
+            DEBUG_ASSERT(other.calc_size() == other.m_size, other.m_tail, other.m_head, other.m_size, other.m_capacity);
         }
     }
 
@@ -216,6 +220,7 @@ public:
 
         m_head = 0;
         m_tail = m_size;
+        DEBUG_ASSERT(calc_size() == m_size, m_tail, m_head, m_size, m_capacity);
     }
 
     T* data() { return m_data; }
@@ -259,7 +264,7 @@ public:
 
     FixedSizeArray::iterator partial_iterator(uint64_t idx)
     {
-        ASSERT(idx < m_size);
+        DEBUG_ASSERT(idx < m_size);
         return iterator(this, find_index(idx));
     }
 }; // class FixedSizeArray

@@ -65,8 +65,8 @@ public:
             const uint64_t capacity = config["cache"]["capacity"].get<uint64_t>();
 
             const uint64_t num_of_blocks = config["cache"]["num_of_blocks"].get<uint64_t>();
-            ASSERT(num_of_blocks > 0, "The number of blocks in the config file must be > 0");
-            ASSERT(config["blocks"].size() == num_of_blocks, "Mismatch between the number of blocks and the blocks defined in the config");
+            DEBUG_ASSERT(num_of_blocks > 1, "The number of blocks in the config file must be > 1");
+            DEBUG_ASSERT(config["blocks"].size() == num_of_blocks, "Mismatch between the number of blocks and the blocks defined in the config");
             std::vector<std::string> cache_types;
             uint64_t total_quanta = 0;
             for (const auto& block : config["blocks"])
@@ -76,7 +76,7 @@ public:
             }
 
             const uint64_t num_of_quanta = config["cache"]["num_of_quanta"].get<uint64_t>();
-            ASSERT(total_quanta == num_of_quanta, std::format("Total quanta from blocks ({}) must equal num_of_quanta ({})", total_quanta, num_of_quanta));
+            DEBUG_ASSERT(total_quanta == num_of_quanta, std::format("Total quanta from blocks ({}) must equal num_of_quanta ({})", total_quanta, num_of_quanta));
             populate_ghost_indeces_and_names(num_of_blocks, cache_types);
 
             m_seed = config["cache"]["seed"].get<uint64_t>();
@@ -84,7 +84,7 @@ public:
             m_decision_window_size = capacity * config["cache"]["decision_window_multiplier"].get<uint64_t>();
 
             const uint64_t sample_rate = config["cache"]["sample_rate"].get<uint64_t>();
-            ASSERT(utils::is_power_of_two(sample_rate), "The sampling rate should be a power of 2");
+            DEBUG_ASSERT(utils::is_power_of_two(sample_rate), "The sampling rate should be a power of 2");
             m_sample_mask = sample_rate - 1;
             }
             catch (const Json::exception& e) {
@@ -185,13 +185,13 @@ public:
             }
         }
 
-        assert(minimal_idx < m_num_of_ghost_caches
+        DEBUG_ASSERT(minimal_idx < m_num_of_ghost_caches
             && minimal_timeframe_ghost_cost < std::numeric_limits<double>::max());
 
         if (minimal_timeframe_ghost_cost < current_timeframe_cost)
         {
             const std::pair<uint64_t, uint64_t> indeces_for_adaption = m_ghost_caches_indeces[minimal_idx];
-            assert(m_main_cache.can_adapt(indeces_for_adaption.first, indeces_for_adaption.second));
+            DEBUG_ASSERT(m_main_cache.can_adapt(indeces_for_adaption.first, false) && m_main_cache.can_adapt(indeces_for_adaption.second, true), indeces_for_adaption.first, indeces_for_adaption.second);
             m_main_cache.move_quantum(indeces_for_adaption.first, indeces_for_adaption.second);
             m_main_sampled.move_quantum(indeces_for_adaption.first, indeces_for_adaption.second);
 

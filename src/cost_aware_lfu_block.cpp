@@ -44,9 +44,9 @@ private:
     CostAwareLFUBlock(const CostAwareLFUBlock& other) = default;
 
     QuantumMoveResult move_quanta_to(PipelineBlock& other) override {
-        ASSERT(m_arr.size() == m_curr_max_capacity || m_arr.empty());
-        ASSERT(m_curr_max_capacity >= m_quantum_size);
-        ASSERT(!other.get_arr().is_rotated());
+        DEBUG_ASSERT(m_arr.size() == m_curr_max_capacity || m_arr.empty());
+        DEBUG_ASSERT(m_curr_max_capacity >= m_quantum_size);
+        DEBUG_ASSERT(!other.get_arr().is_rotated());
 
         QuantumMoveResult result;
         result.items_moved = other.accept_quanta(m_arr);
@@ -63,7 +63,7 @@ private:
 
     std::pair<uint64_t, std::optional<EntryData>> insert_item(EntryData item) override {
         if (m_arr.size() < m_curr_max_capacity) {
-            ASSERT(!m_arr.is_rotated());
+            DEBUG_ASSERT(!m_arr.is_rotated());
             m_arr.push_tail(item);
             return std::make_pair(m_arr.size() - 1, std::nullopt);
         }

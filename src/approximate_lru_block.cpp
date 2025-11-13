@@ -36,8 +36,8 @@ public:
     }
 
     QuantumMoveResult move_quanta_to(PipelineBlock& other) override {
-        ASSERT(m_arr.size() == m_curr_max_capacity || m_arr.empty());
-        ASSERT(m_curr_max_capacity >= m_quantum_size);
+        DEBUG_ASSERT(m_arr.size() == m_curr_max_capacity || m_arr.empty());
+        DEBUG_ASSERT(m_curr_max_capacity >= m_quantum_size);
 
         QuantumMoveResult result;
         result.items_moved = other.accept_quanta(m_arr);
