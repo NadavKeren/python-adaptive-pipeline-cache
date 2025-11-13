@@ -74,7 +74,13 @@ if(BUILD_TESTING)
     add_subdirectory(tests/cpp-tests)
 endif()
 
-install(TARGETS _adaptive_pipeline_cache_impl DESTINATION adaptive_pipeline)
+install(TARGETS _adaptive_pipeline_cache_impl
+        LIBRARY DESTINATION .
+        RUNTIME DESTINATION .)
+
+# Install the config.json file into the adaptive_pipeline package
+install(FILES ${CMAKE_SOURCE_DIR}/adaptive_pipeline/config.json
+        DESTINATION .)
 
 # Custom cleanup target to remove build artifacts, dist, and compiled code
 add_custom_target(distclean

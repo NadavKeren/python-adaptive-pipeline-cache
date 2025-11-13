@@ -51,7 +51,7 @@ jobs:
 
           # Run tests after building (optional)
           CIBW_TEST_REQUIRES: pytest
-          CIBW_TEST_COMMAND: python -c "from adaptive_pipeline import AdaptivePipelineCache; cache = AdaptivePipelineCache(1024); print('Import test passed')"
+          CIBW_TEST_COMMAND: python -c "from adaptive_pipeline import AdaptivePipelineCache, get_default_config_path; cache = AdaptivePipelineCache(get_default_config_path()); print('Import test passed')"
 
       - uses: actions/upload-artifact@v4
         with:

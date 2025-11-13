@@ -77,7 +77,7 @@ archs = ["AMD64"]
 
 # Test the built wheels
 test-requires = "pytest"
-test-command = "python -c \"from adaptive_pipeline import AdaptivePipelineCache; cache = AdaptivePipelineCache(1024); print('Wheel test passed!')\""
+test-command = "python -c \"from adaptive_pipeline import AdaptivePipelineCache, get_default_config_path; cache = AdaptivePipelineCache(get_default_config_path()); print('Wheel test passed!')\""
 
 # scikit-build-core configuration
 [tool.scikit-build]

@@ -1,5 +1,5 @@
 """
-FIFO Cache implementation with C++ backend.
+Adaptive Pipeline Cache implementation with C++ backend.
 This module provides the Python interface to the C++ implementation.
 """
 
@@ -16,15 +16,25 @@ except ImportError as e:
 
 
 class AdaptivePipelineCache(collections.abc.MutableMapping):
-    
+
     __marker : Tuple[float, int] = (-1.0, -1)  # Sentinel for default values
-    
-    def __init__(self, maxsize: int):
-        if not isinstance(maxsize, int) or maxsize <= 0:
-            raise ValueError("maxsize must be a positive integer")
-            
-        self._impl = AdaptivePipelineCacheImpl(maxsize)
-        
+
+    def __init__(self, config_path: str):
+        """
+        Initialize AdaptivePipelineCache with a JSON configuration file.
+
+        Args:
+            config_path: Path to JSON configuration file
+
+        Raises:
+            ValueError: If config_path is not a valid string
+            FileNotFoundError: If config file doesn't exist
+        """
+        if not isinstance(config_path, str):
+            raise ValueError("config_path must be a string")
+
+        self._impl = AdaptivePipelineCacheImpl(config_path)
+
         self.__size = 0
     
     def __repr__(self) -> str:
