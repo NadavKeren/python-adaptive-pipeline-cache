@@ -6,7 +6,7 @@
 #include <vector>
 #include <tuple>
 #include <iostream>
-#include <libassert/assert.hpp>
+#include <cassert>
 
 #include "utils.cpp"
 #include "fixed_size_array.hpp"
@@ -83,8 +83,8 @@ public:
     BasePipelineBlock& operator=(const BasePipelineBlock& other)
     {
         m_arr = other.m_arr;
-        DEBUG_ASSERT(m_cache_max_capacity == other.m_cache_max_capacity);
-        DEBUG_ASSERT(m_quantum_size == other.m_quantum_size);
+        assert(m_cache_max_capacity == other.m_cache_max_capacity);
+        assert(m_quantum_size == other.m_quantum_size);
         m_curr_max_capacity = other.m_curr_max_capacity;
 
         return *this;
@@ -96,12 +96,12 @@ public:
     NewLocationData accept_quanta(FixedSizeArray<EntryData>& arr) override
     {
         this->m_curr_max_capacity += this->m_quantum_size;
-        DEBUG_ASSERT(this->m_curr_max_capacity <= this->m_cache_max_capacity);
+        assert(this->m_curr_max_capacity <= this->m_cache_max_capacity);
 
         NewLocationData locations{};
         if (!arr.empty())
         {
-            DEBUG_ASSERT(m_arr.size() + this->m_quantum_size <= m_arr.capacity());
+            assert(m_arr.size() + this->m_quantum_size <= m_arr.capacity());
             this->m_arr.rotate();
             
             const uint64_t dest_start_idx = m_arr.size();
@@ -127,7 +127,7 @@ public:
 
     EntryData* get_entry(uint64_t idx) override 
     {
-        DEBUG_ASSERT(idx >= 0 && idx < m_arr.size());
+        assert(idx >= 0 && idx < m_arr.size());
         return m_arr.get_item(idx);
     }
 

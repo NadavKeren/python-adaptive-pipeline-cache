@@ -38,25 +38,6 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(json)
 
-FetchContent_Declare(
-    libassert
-    GIT_REPOSITORY https://github.com/jeremy-rifkin/libassert.git
-    GIT_TAG v2.1.0
-)
-
-# Enable PIC for libassert before building
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-FetchContent_MakeAvailable(libassert)
-
-# Set PIC on all libassert targets
-if(TARGET libassert-lib)
-    set_target_properties(libassert-lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
-endif()
-if(TARGET cpptrace-lib)
-    set_target_properties(cpptrace-lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
-endif()
-
 add_library(pipeline_cache_core STATIC
     src/adaptive_pipeline_cache.cpp
     src/cost_aware_lfu_block.cpp
@@ -74,7 +55,7 @@ target_include_directories(pipeline_cache_core
     PUBLIC ${CMAKE_SOURCE_DIR}/src
 )
 target_link_libraries(pipeline_cache_core
-    PUBLIC xxHash::xxhash nlohmann_json::nlohmann_json libassert::assert
+    PUBLIC xxHash::xxhash nlohmann_json::nlohmann_json 
 )
 
 pybind11_add_module(_adaptive_pipeline_cache_impl

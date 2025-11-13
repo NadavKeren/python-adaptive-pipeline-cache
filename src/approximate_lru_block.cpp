@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <random>
 #include <algorithm>
-#include <libassert/assert.hpp>
+#include <cassert>
 
 #include "pipeline_block.hpp"
 
@@ -36,8 +36,8 @@ public:
     }
 
     QuantumMoveResult move_quanta_to(PipelineBlock& other) override {
-        DEBUG_ASSERT(m_arr.size() == m_curr_max_capacity || m_arr.empty());
-        DEBUG_ASSERT(m_curr_max_capacity >= m_quantum_size);
+        assert(m_arr.size() == m_curr_max_capacity || m_arr.empty());
+        assert(m_curr_max_capacity >= m_quantum_size);
 
         QuantumMoveResult result;
         result.items_moved = other.accept_quanta(m_arr);

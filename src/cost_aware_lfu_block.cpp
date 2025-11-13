@@ -44,9 +44,9 @@ private:
     CostAwareLFUBlock(const CostAwareLFUBlock& other) = default;
 
     QuantumMoveResult move_quanta_to(PipelineBlock& other) override {
-        DEBUG_ASSERT(m_arr.size() == m_curr_max_capacity || m_arr.empty());
-        DEBUG_ASSERT(m_curr_max_capacity >= m_quantum_size);
-        DEBUG_ASSERT(!other.get_arr().is_rotated());
+        assert(m_arr.size() == m_curr_max_capacity || m_arr.empty());
+        assert(m_curr_max_capacity >= m_quantum_size);
+        assert(!other.get_arr().is_rotated());
 
         QuantumMoveResult result;
         result.items_moved = other.accept_quanta(m_arr);
@@ -63,7 +63,7 @@ private:
 
     InsertionResult insert_item(const EntryData& item) override {
         if (m_arr.size() < m_curr_max_capacity) {
-            DEBUG_ASSERT(!m_arr.is_rotated());
+            assert(!m_arr.is_rotated());
             m_arr.push_tail(item);
             return InsertionResult{.was_item_inserted = true,
                                    .replaced_idx = m_arr.size() - 1,

@@ -6,11 +6,12 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <format>
-#include <libassert/assert.hpp>
 #include "utils.cpp"
 #include "pipeline_block.hpp"
 #include "xxhash.h"
 #include "pipeline_cache.hpp"
+
+#include <cassert>
 
 using Json = nlohmann::json;
 
@@ -60,32 +61,53 @@ public:
         if (config_file.is_open())
         {
             try {
-            Json config = Json::parse(config_file);
+                Json config = Json::parse(config_file);
 
-            const uint64_t capacity = config["cache"]["capacity"].get<uint64_t>();
+                const uint64_t capacity = config["cache"]["capacity"].get<uint64_t>();
 
-            const uint64_t num_of_blocks = config["cache"]["num_of_blocks"].get<uint64_t>();
-            DEBUG_ASSERT(num_of_blocks > 1, "The number of blocks in the config file must be > 1");
-            DEBUG_ASSERT(config["blocks"].size() == num_of_blocks, "Mismatch between the number of blocks and the blocks defined in the config");
-            std::vector<std::string> cache_types;
-            uint64_t total_quanta = 0;
-            for (const auto& block : config["blocks"])
-            {
-                cache_types.push_back(block["type"].get<std::string>());
-                total_quanta += block["initial_quanta"].get<uint64_t>();
-            }
+                const uint64_t num_of_blocks = config["cache"]["num_of_blocks"].get<uint64_t>();
+                if (num_of_blocks <= 1)
+                {
+                    std::cerr << "num_of_blocks must be 2 or higher" << std::endl;
+                    exit(1);
+                }
 
-            const uint64_t num_of_quanta = config["cache"]["num_of_quanta"].get<uint64_t>();
-            DEBUG_ASSERT(total_quanta == num_of_quanta, std::format("Total quanta from blocks ({}) must equal num_of_quanta ({})", total_quanta, num_of_quanta));
-            populate_ghost_indeces_and_names(num_of_blocks, cache_types);
+                if (config["blocks"].size() != num_of_blocks)
+                {
+                    std::cerr << "mismatch between the number of blocks and their definitions" << std::endl;
+                    exit(1);
+                }
 
-            m_seed = config["cache"]["seed"].get<uint64_t>();
+                std::vector<std::string> cache_types;
+                uint64_t total_quanta = 0;
+                for (const auto& block : config["blocks"])
+                {
+                    cache_types.push_back(block["type"].get<std::string>());
+                    total_quanta += block["initial_quanta"].get<uint64_t>();
+                }
 
-            m_decision_window_size = capacity * config["cache"]["decision_window_multiplier"].get<uint64_t>();
+                const uint64_t num_of_quanta = config["cache"]["num_of_quanta"].get<uint64_t>();
 
-            const uint64_t sample_rate = config["cache"]["sample_rate"].get<uint64_t>();
-            DEBUG_ASSERT(utils::is_power_of_two(sample_rate), "The sampling rate should be a power of 2");
-            m_sample_mask = sample_rate - 1;
+                if (total_quanta != num_of_quanta)
+                {
+                    std::cerr << "the total quanta isn't the same as the num_of_quanta" << std::endl;
+                    exit(1);
+                }
+
+                populate_ghost_indeces_and_names(num_of_blocks, cache_types);
+
+                m_seed = config["cache"]["seed"].get<uint64_t>();
+
+                m_decision_window_size = capacity * config["cache"]["decision_window_multiplier"].get<uint64_t>();
+
+                const uint64_t sample_rate = config["cache"]["sample_rate"].get<uint64_t>();
+
+                if (!utils::is_power_of_two(sample_rate))
+                {
+                    std::cerr << "the sample_rate must be a power of two" << std::endl;
+                    exit(1);
+                }
+                m_sample_mask = sample_rate - 1;
             }
             catch (const Json::exception& e) {
                 std::cerr << "ERROR: Failed to read cache config: " << e.what() << "\n";
@@ -98,9 +120,9 @@ public:
 
             config_file.close();
         } else {
-            std::cerr << "Warning: config.json not found, using default settings" << std::endl;
+            std::cerr << "Warning: config.json not found" << std::endl;
+            exit(1);
         }
-
     }
 
     std::tuple<double, uint64_t> getitem(uint64_t key) 
@@ -185,13 +207,13 @@ public:
             }
         }
 
-        DEBUG_ASSERT(minimal_idx < m_num_of_ghost_caches
+        assert(minimal_idx < m_num_of_ghost_caches
             && minimal_timeframe_ghost_cost < std::numeric_limits<double>::max());
 
         if (minimal_timeframe_ghost_cost < current_timeframe_cost)
         {
             const std::pair<uint64_t, uint64_t> indeces_for_adaption = m_ghost_caches_indeces[minimal_idx];
-            DEBUG_ASSERT(m_main_cache.can_adapt(indeces_for_adaption.first, false) && m_main_cache.can_adapt(indeces_for_adaption.second, true), indeces_for_adaption.first, indeces_for_adaption.second);
+            assert(m_main_cache.can_adapt(indeces_for_adaption.first, false) && m_main_cache.can_adapt(indeces_for_adaption.second, true));
             m_main_cache.move_quantum(indeces_for_adaption.first, indeces_for_adaption.second);
             m_main_sampled.move_quantum(indeces_for_adaption.first, indeces_for_adaption.second);
 

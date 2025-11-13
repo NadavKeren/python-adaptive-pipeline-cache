@@ -5,9 +5,9 @@
 #include <fstream>
 #include <stdexcept>
 #include <format>
+#include <cassert>
 
 #include <nlohmann/json.hpp>
-#include <libassert/assert.hpp>
 
 #include "pipeline_cache.hpp"
 
@@ -58,8 +58,8 @@ PipelineCache::PipelineCache(const PipelineCache& other) : m_cache_capacity {oth
 
 PipelineCache& PipelineCache::operator=(const PipelineCache& other)
 {
-    DEBUG_ASSERT(this != &other);
-    DEBUG_ASSERT(!other.m_blocks.empty(), std::format("Cannot copy from PipelineCache with empty m_blocks. other.m_blocks.size()={}", other.m_blocks.size()));
+    assert(this != &other);
+    assert(!other.m_blocks.empty());
 
     m_cache_capacity = other.m_cache_capacity;
     m_quantum_size = other.m_quantum_size;
@@ -82,8 +82,8 @@ PipelineCache& PipelineCache::operator=(const PipelineCache& other)
             throw std::runtime_error("Unknown block type during copy assignment: " + block_type);
         }
 
-        DEBUG_ASSERT(m_blocks[i]->capacity() == other.m_blocks[i]->capacity());
-        DEBUG_ASSERT(m_blocks[i]->size() == other.m_blocks[i]->size());
+        assert(m_blocks[i]->capacity() == other.m_blocks[i]->capacity());
+        assert(m_blocks[i]->size() == other.m_blocks[i]->size());
     }
 
     m_quanta_alloc = other.m_quanta_alloc;
@@ -99,9 +99,9 @@ PipelineCache& PipelineCache::operator=(const PipelineCache& other)
 
 const EntryData& PipelineCache::get_item(uint64_t key)
 {
-    DEBUG_ASSERT(contains(key));
+    assert(contains(key));
     const EntryPosition& pos = m_items[key];
-    DEBUG_ASSERT(pos.id == key);
+    assert(pos.id == key);
 
     EntryData* item_entry = m_blocks[pos.block_num]->get_entry(pos.idx);
 
@@ -130,7 +130,7 @@ void PipelineCache::insert_item(uint64_t key, double latency, uint64_t tokens)
             if (InsertionResult result = m_blocks[idx]->insert_item(item);
                 result.was_item_inserted)
             {
-                DEBUG_ASSERT(result.replaced_idx < m_blocks[idx]->capacity());
+                assert(result.replaced_idx < m_blocks[idx]->capacity());
                 m_items.insert_or_assign(item.id, EntryPosition{item.id, idx, result.replaced_idx});
 
                 was_item_evicted = result.removed_entry.has_value();
@@ -167,7 +167,10 @@ PipelineCache::PipelineCache(bool is_sampled, const std::string& config_path)
       m_stats{}
 {
     std::ifstream config_file(config_path);
-    if (!config_file.is_open()) { DEBUG_ASSERT(false, "Failed to open config file: " + config_path); }
+    if (!config_file.is_open()) {
+        std::cerr << "ERROR: Failed to open config file: " << config_path << "\n";
+        exit(1);
+    }
 
     Json config = Json::parse(config_file);
 
@@ -180,12 +183,24 @@ PipelineCache::PipelineCache(bool is_sampled, const std::string& config_path)
     try
     {
         m_num_of_quanta = config["cache"]["num_of_quanta"].get<uint64_t>();
-        DEBUG_ASSERT(utils::is_power_of_two(m_num_of_quanta));
+        if (!utils::is_power_of_two(m_num_of_quanta))
+        {
+            std::cerr << "num_of_quanta is not a power of 2" << std::endl;
+            exit(1);
+        }
         m_cache_capacity = config["cache"]["capacity"].get<uint64_t>();
-        DEBUG_ASSERT(utils::is_power_of_two(m_cache_capacity));
+        if (!utils::is_power_of_two(m_cache_capacity))
+        {
+            std::cerr << "cache_capacity is not a power of 2" << std::endl;
+            exit(1);
+        }
         const uint64_t non_sampled_quantum_size = m_cache_capacity / m_num_of_quanta;
         const uint64_t sample_rate = config["cache"]["sample_rate"].get<uint64_t>();
-        DEBUG_ASSERT(utils::is_power_of_two(sample_rate));
+        if (!utils::is_power_of_two(sample_rate))
+        {
+            std::cerr << "sample_rate is not a power of 2" << std::endl;
+            exit(1);
+        }
 
         const uint64_t aging_window_multiplier = config["cache"]["aging_window_multiplier"].get<uint64_t>();
         m_aging_window_size = aging_window_multiplier * m_cache_capacity;
@@ -208,7 +223,11 @@ PipelineCache::PipelineCache(bool is_sampled, const std::string& config_path)
             const uint64_t initial_quanta = block_config["initial_quanta"].get<uint64_t>();
 
             m_quanta_alloc[i] = initial_quanta;
-            DEBUG_ASSERT(initial_quanta >= 0 && initial_quanta <= m_num_of_quanta);
+            if (initial_quanta < 0 || initial_quanta > m_num_of_quanta)
+            {
+                std::cerr << "The initial quanta of " << i << " is not valid" << std::endl;
+                exit(1);
+            }
 
             if (block_type == "fifo")
             {
@@ -233,7 +252,8 @@ PipelineCache::PipelineCache(bool is_sampled, const std::string& config_path)
             }
             else
             {
-                DEBUG_ASSERT(false, std::format("No block type: {}", block_type));
+                std::cerr << "ERROR: Unknown block type: " << block_type << "\n";
+                exit(1);
             }
         }
     }
@@ -262,14 +282,14 @@ void PipelineCache::validate_sizes() const
     {
         const uint64_t blk_size = m_blocks[idx]->size();
         const uint64_t blk_capacity = m_blocks[idx]->capacity();
-        DEBUG_ASSERT(blk_size <= m_quanta_alloc[idx] * m_quantum_size);
-        DEBUG_ASSERT(blk_capacity == m_quanta_alloc[idx] * m_quantum_size);
+        assert(blk_size <= m_quanta_alloc[idx] * m_quantum_size);
+        assert(blk_capacity == m_quanta_alloc[idx] * m_quantum_size);
         num_of_items += blk_size;
     }
 
-    DEBUG_ASSERT(num_of_items <= m_cache_capacity);
-    DEBUG_ASSERT(size() == num_of_items);
-    DEBUG_ASSERT(m_items.size() == num_of_items);
+    assert(num_of_items <= m_cache_capacity);
+    assert(size() == num_of_items);
+    assert(m_items.size() == num_of_items);
 }
 
 bool PipelineCache::contains(uint64_t key) const 
@@ -279,7 +299,7 @@ bool PipelineCache::contains(uint64_t key) const
 
 EntryData PipelineCache::evict_item() 
 {
-    DEBUG_ASSERT(!m_eviction_queue.empty());
+    assert(!m_eviction_queue.empty());
     EntryData item = m_eviction_queue.back();
     m_eviction_queue.pop_back();
     return item;
@@ -296,7 +316,7 @@ void PipelineCache::move_quantum(uint64_t src_block, uint64_t dest_block)
     {
         m_block->prepare_for_copy();
     }
-    DEBUG_ASSERT(can_adapt(src_block, false) && can_adapt(dest_block, true));
+    assert(can_adapt(src_block, false) && can_adapt(dest_block, true));
     QuantumMoveResult result = m_blocks[src_block]->move_quanta_to(*m_blocks.at(dest_block));
 
     // Update positions for items that moved to destination block

@@ -2,7 +2,7 @@
 
 #include <cstdint>
 #include <cstring>
-#include <libassert/assert.hpp>
+#include <cassert>
 
 template<typename T>
 class FixedSizeArray {
@@ -22,10 +22,10 @@ public:
 
     FixedSizeArray(const FixedSizeArray& other) 
     {
-        DEBUG_ASSERT(!other.is_rotated());
+        assert(!other.is_rotated());
         if (m_data != nullptr) 
         {
-            DEBUG_ASSERT(m_capacity == other.m_capacity);
+            assert(m_capacity == other.m_capacity);
         }
         else
         {
@@ -37,16 +37,16 @@ public:
         m_head = other.m_head;
         m_tail = other.m_tail;
         std::memcpy(m_data, other.m_data, m_size * sizeof(T));
-        DEBUG_ASSERT(m_tail == m_head + m_size);
+        assert(m_tail == m_head + m_size);
     }
 
     FixedSizeArray& operator=(const FixedSizeArray& other) 
     {
-        DEBUG_ASSERT(!other.is_rotated());
+        assert(!other.is_rotated());
         if (this != &other) {
             if (m_data != nullptr) 
             {
-                DEBUG_ASSERT(m_capacity == other.m_capacity);
+                assert(m_capacity == other.m_capacity);
             }
             else 
             {
@@ -58,7 +58,7 @@ public:
             m_head = other.m_head;
             m_tail = other.m_tail;
             std::memcpy(m_data, other.m_data, m_size * sizeof(T));
-            DEBUG_ASSERT(m_tail == m_head + m_size);
+            assert(m_tail == m_head + m_size);
         }
         return *this;
     }
@@ -70,7 +70,7 @@ public:
         m_data = other.m_data;
         m_head = 0;
         m_tail = m_size;
-        DEBUG_ASSERT(this->m_capacity == other.m_capacity);
+        assert(this->m_capacity == other.m_capacity);
 
         other.m_data = nullptr;
         other.m_capacity = -1;
@@ -109,42 +109,42 @@ public:
 
     void push_tail(const T& value) 
     {
-        DEBUG_ASSERT(!is_full());
+        assert(!is_full());
         
         m_data[m_tail] = value;
         increase(m_tail);
         ++m_size;
 
-        DEBUG_ASSERT(calc_size() == m_size, m_tail, m_head, m_size, m_capacity);
+        assert(calc_size() == m_size);
     }
 
     T pop_head() 
     {
-        DEBUG_ASSERT(!empty());
+        assert(!empty());
         
         T value = m_data[m_head];
         increase(m_head);
         --m_size;
 
-        DEBUG_ASSERT(calc_size() == m_size, m_tail, m_head, m_size, m_capacity);
+        assert(calc_size() == m_size);
         return value;
     }
 
     T& operator[](uint64_t index) 
     {
-        DEBUG_ASSERT(index < m_capacity);
+        assert(index < m_capacity);
         return m_data[find_index(index)];
     }
 
     const T& operator[](uint64_t index) const 
     {
-        DEBUG_ASSERT(index < m_capacity);
+        assert(index < m_capacity);
         return m_data[find_index(index)];
     }
 
     T* get_item(uint64_t index) 
     {
-        DEBUG_ASSERT(index <= m_capacity);
+        assert(index <= m_capacity);
         return &m_data[find_index(index)];
     }
 
@@ -155,13 +155,13 @@ public:
 
     T replace(uint64_t index, const T& value) 
     {
-        DEBUG_ASSERT(index < m_size);
+        assert(index < m_size);
         
         uint64_t real_index = find_index(index);
         T old_value = m_data[real_index];
         m_data[real_index] = value;
 
-        DEBUG_ASSERT(calc_size() == m_size, m_tail, m_head, m_size, m_capacity);
+        assert(calc_size() == m_size);
 
         return old_value;
     }
@@ -190,18 +190,18 @@ public:
     {
         if (!empty())
         {
-            DEBUG_ASSERT(calc_size() == m_size, m_tail, m_head, m_size, m_capacity);
-            DEBUG_ASSERT(other.calc_size() == other.m_size, other.m_tail, other.m_head, other.m_size, other.m_capacity);
-            DEBUG_ASSERT(count <= m_size || count + other.m_size > other.m_capacity);
-            DEBUG_ASSERT(m_head == 0 && m_tail == m_head + m_size || this->is_full());
+            assert(calc_size() == m_size);
+            assert(other.calc_size() == other.m_size);
+            assert(count <= m_size || count + other.m_size > other.m_capacity);
+            assert(m_head == 0 && m_tail == m_head + m_size || this->is_full());
             
             std::memcpy(other.m_data + other.m_size, m_data, count * sizeof(T));
             other.m_size += count;
             other.m_tail = (other.m_tail + count) % other.m_capacity;
             m_head = (m_head + count) % m_capacity;
             m_size -= count;
-            DEBUG_ASSERT(calc_size() == m_size, m_tail, m_head, m_size, m_capacity);
-            DEBUG_ASSERT(other.calc_size() == other.m_size, other.m_tail, other.m_head, other.m_size, other.m_capacity);
+            assert(calc_size() == m_size);
+            assert(other.calc_size() == other.m_size);
             rotate();
         }
     }
@@ -229,7 +229,7 @@ public:
 
         m_head = 0;
         m_tail = m_size;
-        DEBUG_ASSERT(calc_size() == m_size, m_tail, m_head, m_size, m_capacity);
+        assert(calc_size() == m_size);
     }
 
     T* data() { return m_data; }
@@ -273,7 +273,7 @@ public:
 
     FixedSizeArray::iterator partial_iterator(uint64_t idx)
     {
-        DEBUG_ASSERT(idx < m_size);
+        assert(idx < m_size);
         return iterator(this, find_index(idx));
     }
 }; // class FixedSizeArray

@@ -4,7 +4,7 @@
 #include <cmath>
 #include <vector>
 #include <cstring>
-#include <libassert/assert.hpp>
+#include <cassert>
 #include "count_min_sketch.hpp"
 
 CountMinSketch::CountMinSketch() : m_width(0), m_depth(0), m_table{nullptr}, m_hash_coefficients{nullptr} {}
@@ -15,8 +15,8 @@ CountMinSketch::CountMinSketch(double error,
                                                 m_depth(static_cast<uint32_t>(std::ceil(std::log(1 / (1 - probability)) / std::log(2)))),
                                                 m_table(new uint32_t*[m_depth]),
                                                 m_hash_coefficients(new uint32_t[m_depth]) {
-    DEBUG_ASSERT(error > 0 && error < 1);
-    DEBUG_ASSERT(probability > 0 && probability < 1);
+    assert(error > 0 && error < 1);
+    assert(probability > 0 && probability < 1);
 
     for (uint32_t idx = 0; idx < m_depth; ++idx)
     {
@@ -33,7 +33,7 @@ CountMinSketch::CountMinSketch(double error,
 
 CountMinSketch::CountMinSketch(const CountMinSketch& other) : m_width{other.m_width}, m_depth{other.m_depth}, m_table{nullptr}, m_hash_coefficients{nullptr}
 {
-    DEBUG_ASSERT (this != &other);
+    assert (this != &other);
     if (m_table != nullptr)
     {
         this->delete_table();
@@ -43,8 +43,8 @@ CountMinSketch::CountMinSketch(const CountMinSketch& other) : m_width{other.m_wi
 
 CountMinSketch& CountMinSketch::operator=(const CountMinSketch& other)
 {
-    DEBUG_ASSERT (this != &other);
-    DEBUG_ASSERT (this->m_table == nullptr || (this->m_width == other.m_width && this->m_depth == other.m_depth));
+    assert (this != &other);
+    assert (this->m_table == nullptr || (this->m_width == other.m_width && this->m_depth == other.m_depth));
     if (m_table != nullptr)
     {
         this->delete_table();
@@ -81,8 +81,8 @@ void CountMinSketch::delete_table()
 
 void CountMinSketch::copy_table(const CountMinSketch& other)
 {
-    DEBUG_ASSERT(this->m_width == other.m_width && this->m_depth == other.m_depth);
-    DEBUG_ASSERT(m_table == nullptr && m_hash_coefficients == nullptr);
+    assert(this->m_width == other.m_width && this->m_depth == other.m_depth);
+    assert(m_table == nullptr && m_hash_coefficients == nullptr);
     m_table = new uint32_t*[m_depth];
 
     for (uint32_t idx = 0; idx < m_depth; ++idx)
