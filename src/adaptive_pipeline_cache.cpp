@@ -5,7 +5,6 @@
 #include <iostream>
 #include <fstream>
 #include <nlohmann/json.hpp>
-#include <format>
 #include "utils.cpp"
 #include "pipeline_block.hpp"
 #include "xxhash.h"
@@ -44,7 +43,7 @@ private:
                 if (i != j)
                 {
                     m_ghost_caches_indeces.push_back(std::make_pair(i, j));
-                    const std::string cache_name = std::format("-{}+{}", cache_types[i], cache_types[j]);
+                    const std::string cache_name = "-" + cache_types[i] + "+" + cache_types[j];
                     m_ghost_caches_names.push_back(cache_name);
                 }
             }
