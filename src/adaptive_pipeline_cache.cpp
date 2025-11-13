@@ -232,10 +232,14 @@ public:
 
     std::pair<uint64_t, std::tuple<double, uint64_t>> popitem() 
     {
-        assert(m_main_cache.should_evict());
-        const EntryData entry = m_main_cache.evict_item();
+        if (m_main_cache.should_evict())
+        {
+            const EntryData entry = m_main_cache.evict_item();
 
-        return std::make_pair(entry.id, std::make_tuple(entry.latency, entry.tokens));
+            return std::make_pair(entry.id, std::make_tuple(entry.latency, entry.tokens));
+        }
+
+        return std::make_pair(0, std::make_tuple(0, std::numeric_limits<uint64_t>::max()));
     }
 
     std::tuple<double, uint64_t> get(uint64_t key, const std::tuple<double, uint64_t>& default_value = std::make_tuple(0.0, 0)) 

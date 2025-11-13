@@ -39,16 +39,20 @@ public:
     }
 
 
-    std::pair<uint64_t, std::optional<EntryData>> insert_item(EntryData item) override {
+    InsertionResult insert_item(const EntryData& item) override {
         if (m_arr.size() < m_curr_max_capacity) {
             assert(!m_arr.is_rotated());
             m_arr.push_tail(item);
-            return std::make_pair(m_arr.size() - 1, std::nullopt);
+            return InsertionResult{.was_item_inserted = true,
+                                   .replaced_idx = m_arr.size() - 1,
+                                   .removed_entry = std::nullopt};
         }
 
         EntryData evicted_item = m_arr.pop_head();
         m_arr.push_tail(item);
-        return std::make_pair(m_arr.size() - 1, evicted_item);
+        return InsertionResult{.was_item_inserted = true,
+                               .replaced_idx = m_arr.size() - 1,
+                               .removed_entry = evicted_item};
     }
 
     void prepare_for_copy() override

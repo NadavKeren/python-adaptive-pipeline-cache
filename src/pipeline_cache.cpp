@@ -127,16 +127,16 @@ void PipelineCache::insert_item(uint64_t key, double latency, uint64_t tokens)
     {
         if (m_quanta_alloc[idx] > 0)
         {
-            auto res = m_blocks[idx]->insert_item(item);
-            if (res.first != std::numeric_limits<uint64_t>::max())
+            if (InsertionResult result = m_blocks[idx]->insert_item(item);
+                result.was_item_inserted)
             {
-                m_items.insert_or_assign(item.id, EntryPosition{item.id, idx, res.first});
                 DEBUG_ASSERT(result.replaced_idx < m_blocks[idx]->capacity());
+                m_items.insert_or_assign(item.id, EntryPosition{item.id, idx, result.replaced_idx});
 
-                was_item_evicted = res.second.has_value();
+                was_item_evicted = result.removed_entry.has_value();
                 if (was_item_evicted)
                 {
-                    item = *res.second;
+                    item = *result.removed_entry;
                 }
             }
         }

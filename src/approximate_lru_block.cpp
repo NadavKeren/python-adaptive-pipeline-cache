@@ -52,10 +52,12 @@ public:
         return result;
     }
 
-    std::pair<uint64_t, std::optional<EntryData>> insert_item(EntryData item) override {
+    InsertionResult insert_item(const EntryData& item) override {
         if (m_arr.size() < m_curr_max_capacity) {
             m_arr.push_tail(item);
-            return std::make_pair(m_arr.size() - 1, std::nullopt);
+            return InsertionResult{.was_item_inserted = true,
+                                   .replaced_idx = m_arr.size() - 1,
+                                   .removed_entry = std::nullopt};
         }
 
         std::uniform_int_distribution<uint64_t> distribution(0, m_arr.size() - 1);
@@ -65,7 +67,7 @@ public:
         uint64_t idx_to_remove = start_idx;
         uint64_t oldest_timestamp = m_arr[start_idx].last_access_time;
 
-        for (uint64_t i = 0; i < m_sample_size; ++i) {
+        for (uint64_t i = 0; i < std::min(m_sample_size, m_curr_max_capacity); ++i) {
             EntryData entry = *itr;
             ++itr;
             if (entry.last_access_time < oldest_timestamp) {
@@ -76,11 +78,15 @@ public:
 
         // Holding the latest timestamp directly allows us to reject items from the ALRU.
         if (oldest_timestamp > item.last_access_time) {
-            return std::make_pair(std::numeric_limits<uint64_t>::max(), item);
+            return InsertionResult{.was_item_inserted = false,
+                                   .replaced_idx = std::numeric_limits<uint64_t>::max(),
+                                   .removed_entry = std::nullopt};
         }
 
         EntryData evicted_item = m_arr.replace(idx_to_remove, item);
-        return std::make_pair(idx_to_remove, evicted_item);
+        return InsertionResult{.was_item_inserted = true,
+                               .replaced_idx = idx_to_remove,
+                               .removed_entry = evicted_item};
     }
 
     void prepare_for_copy() override

@@ -86,6 +86,15 @@ private:
         return (m_head + index) < m_capacity ? m_head + index : (m_head + index) - m_capacity;
     }
 
+    void increase(uint64_t& index)
+    {
+        ++index;
+        if (index >= m_capacity)
+        {
+            index = 0;
+        }
+    }
+
     [[nodiscard]] uint64_t calc_size() const
     {
         return m_tail > m_head || m_tail == m_head && m_size == 0 
@@ -103,7 +112,7 @@ public:
         DEBUG_ASSERT(!is_full());
         
         m_data[m_tail] = value;
-        m_tail = (m_tail + 1) < m_capacity ? m_tail + 1 : 0;
+        increase(m_tail);
         ++m_size;
 
         DEBUG_ASSERT(calc_size() == m_size, m_tail, m_head, m_size, m_capacity);
@@ -114,7 +123,7 @@ public:
         DEBUG_ASSERT(!empty());
         
         T value = m_data[m_head];
-        m_head = (m_head + 1) < m_capacity ? m_head + 1 : 0;
+        increase(m_head);
         --m_size;
 
         DEBUG_ASSERT(calc_size() == m_size, m_tail, m_head, m_size, m_capacity);
@@ -179,7 +188,7 @@ public:
 
     void partial_move_to(FixedSizeArray& other, uint64_t count) 
     {
-        if (!this->empty())
+        if (!empty())
         {
             DEBUG_ASSERT(calc_size() == m_size, m_tail, m_head, m_size, m_capacity);
             DEBUG_ASSERT(other.calc_size() == other.m_size, other.m_tail, other.m_head, other.m_size, other.m_capacity);
@@ -188,12 +197,12 @@ public:
             
             std::memcpy(other.m_data + other.m_size, m_data, count * sizeof(T));
             other.m_size += count;
-            other.m_tail += count;
-            m_head += count;
+            other.m_tail = (other.m_tail + count) % other.m_capacity;
+            m_head = (m_head + count) % m_capacity;
             m_size -= count;
-            this->rotate();
             DEBUG_ASSERT(calc_size() == m_size, m_tail, m_head, m_size, m_capacity);
             DEBUG_ASSERT(other.calc_size() == other.m_size, other.m_tail, other.m_head, other.m_size, other.m_capacity);
+            rotate();
         }
     }
 

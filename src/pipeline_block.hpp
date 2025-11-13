@@ -4,13 +4,15 @@
 #include <string>
 #include <optional>
 #include <vector>
+#include <tuple>
 #include <iostream>
 #include <libassert/assert.hpp>
 
 #include "utils.cpp"
 #include "fixed_size_array.hpp"
 
-struct EntryData {
+struct EntryData
+{
     uint64_t id;
     double latency;
     uint64_t tokens;
@@ -19,9 +21,17 @@ struct EntryData {
     EntryData() : id(0), latency(0.0), tokens(0), last_access_time(0) {}
 };
 
+struct InsertionResult
+{
+    bool was_item_inserted{false};
+    uint64_t replaced_idx{std::numeric_limits<uint64_t>::max()};
+    std::optional<EntryData> removed_entry;
+};
+
 using NewLocationData = std::vector<std::pair<uint64_t, uint64_t>>;
 
-struct QuantumMoveResult {
+struct QuantumMoveResult
+{
     NewLocationData items_moved;
     NewLocationData items_remaining;
 };
@@ -34,7 +44,7 @@ public:
     virtual NewLocationData accept_quanta(FixedSizeArray<EntryData>& arr) = 0;
 
     virtual FixedSizeArray<EntryData>& get_arr() = 0;
-    virtual std::pair<uint64_t, std::optional<EntryData>> insert_item(EntryData item) = 0;
+    virtual InsertionResult insert_item(const EntryData& item) = 0;
     [[nodiscard]] virtual uint64_t size() const = 0;
     [[nodiscard]] virtual uint64_t capacity() const = 0;
     [[nodiscard]] virtual bool is_full() const = 0;
