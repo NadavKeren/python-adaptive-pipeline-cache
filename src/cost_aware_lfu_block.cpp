@@ -27,7 +27,7 @@ private:
                                uint64_t sample_size)
             : BasePipelineBlock(capacity, quantum_size, quanta_allocation, "CostAwareLFU"),
               m_sketch(sketch),
-              m_generator(seed),
+              m_generator(static_cast<std::mt19937::result_type>(seed)),
               m_sample_size(sample_size)
               {}
 

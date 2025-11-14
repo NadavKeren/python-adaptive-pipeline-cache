@@ -23,7 +23,7 @@ CountMinSketch::CountMinSketch(double error,
         m_table[idx] = new uint32_t[m_width]();
     }
 
-    std::mt19937 gen(seed);
+    std::mt19937 gen(static_cast<std::mt19937::result_type>(seed));
     std::uniform_int_distribution<uint32_t> dis(1, std::numeric_limits<uint32_t>::max() - 1);
     for (uint32_t idx = 0; idx < m_depth; ++idx)
     {
